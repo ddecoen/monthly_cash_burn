@@ -652,15 +652,66 @@ def quarterly_view():
     return jsonify(_build_quarterly_data(year, quarter))
 
 
+# ---------------------------------------------------------------------------
+# Excel export — investor-friendly burn report
+# ---------------------------------------------------------------------------
+
+
+def _extract_row_value(rows: list[dict], desc_fragment: str) -> list:
+    """Find a row whose description contains *desc_fragment* (case-insensitive)
+    and return its values list.  Prefers exact matches over substring.
+    Returns a list of Nones if not found."""
+    frag = desc_fragment.lower()
+    # First pass: exact match on the stripped, lowered description.
+    for r in rows:
+        d = r.get("description", "").strip().lower()
+        if d == frag or d == frag.rstrip(":"):
+            return r.get("values", [])
+    # Second pass: starts-with match.
+    for r in rows:
+        d = r.get("description", "").strip().lower()
+        if d.startswith(frag):
+            return r.get("values", [])
+    # Third pass: substring match.
+    for r in rows:
+        if frag in r.get("description", "").lower():
+            return r.get("values", [])
+    return []
+
+
+def _safe(val: float | None) -> float | None:
+    """Return the value unchanged, or None."""
+    if val is None:
+        return None
+    return round(val, 2)
+
+
+def _sum_available(vals: list[float | None]) -> float | None:
+    """Sum only non-None values; return None if all are None."""
+    nums = [v for v in vals if v is not None]
+    return round(sum(nums), 2) if nums else None
+
+
+def _last_available(vals: list[float | None]) -> float | None:
+    """Return the last non-None value."""
+    for v in reversed(vals):
+        if v is not None:
+            return v
+    return None
+
+
 @app.route("/api/export", methods=["GET"])
 def export_excel():
-    """Export quarterly SCF data as a professionally formatted Excel workbook.
+    """Export an investor-friendly monthly cash burn report as Excel.
+
+    Two sheets:
+      1. **Cash Burn Report** — high-level summary, key metrics, and
+         simplified monthly/quarterly cash-flow view.
+      2. **Detailed Cash Flows** — the full SCF line items.
 
     Query params:
         year    — required, e.g. 2025
-        quarter — required, 1-4 (Q1=Jan-Mar … Q4=Oct-Dec)
-
-    Returns an .xlsx file as a downloadable attachment.
+        quarter — required, 1-4
     """
     year_raw = request.args.get("year")
     quarter_raw = request.args.get("quarter")
@@ -676,185 +727,520 @@ def export_excel():
     if quarter not in (1, 2, 3, 4):
         return jsonify({"error": "'quarter' must be 1, 2, 3, or 4."}), 400
 
-    data = _build_quarterly_data(year, quarter)
-    months_meta = data["months"]
-    data_rows = data["rows"]
+    qdata = _build_quarterly_data(year, quarter)
+    months_meta = qdata["months"]
+    all_rows = qdata["rows"]
 
-    # Total columns: Description + one per month + Quarter Total.
-    num_cols = 1 + len(months_meta) + 1
+    # Convenience: month column headers.
+    month_headers = [
+        f"{_MONTH_ABBREVS[m['month']]} {m['year']}" for m in months_meta
+    ]
+    num_months = len(months_meta)
+    # Columns: Description | month1 | month2 | month3 | Quarter Total
+    num_cols = 1 + num_months + 1
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = f"SCF Q{quarter} {year}"
-
-    # -- Row 1: Company title ------------------------------------------------
-    ws.merge_cells(
-        start_row=1, start_column=1, end_row=1, end_column=num_cols,
+    # ── Extract key line-item values from the quarterly data ──────────
+    v_net_income = _extract_row_value(all_rows, "net (loss) income")
+    v_da = _extract_row_value(all_rows, "depreciation and amortization")
+    v_ar = _extract_row_value(all_rows, "accounts receivable")
+    v_prepaids = _extract_row_value(all_rows, "prepaid expenses")
+    v_other_assets = _extract_row_value(all_rows, "other assets")
+    v_ap = _extract_row_value(all_rows, "accounts payable")
+    v_accrued = _extract_row_value(all_rows, "accrued expenses")
+    v_deferred = _extract_row_value(all_rows, "deferred revenue")
+    v_op_total = _extract_row_value(all_rows, "net cash used in operating")
+    if not any(v is not None for v in v_op_total):
+        v_op_total = _extract_row_value(
+            all_rows, "net cash provided by operating"
+        )
+    v_capex = _extract_row_value(all_rows, "purchases of property")
+    v_inv_total = _extract_row_value(all_rows, "net cash used in investing")
+    if not any(v is not None for v in v_inv_total):
+        v_inv_total = _extract_row_value(
+            all_rows, "net cash provided by investing"
+        )
+    v_stock = _extract_row_value(all_rows, "proceeds from stock")
+    v_equity = _extract_row_value(all_rows, "other equity")
+    v_fin_total = _extract_row_value(
+        all_rows, "net cash provided by financing"
     )
-    title_cell = ws.cell(row=1, column=1, value="Statement of Cash Flows")
-    title_cell.font = Font(bold=True, size=14)
-    title_cell.alignment = Alignment(horizontal="center")
+    if not any(v is not None for v in v_fin_total):
+        v_fin_total = _extract_row_value(
+            all_rows, "net cash used in financing"
+        )
+    v_net_change = _extract_row_value(all_rows, "net decrease in cash")
+    if not any(v is not None for v in v_net_change):
+        v_net_change = _extract_row_value(all_rows, "net increase in cash")
+    v_begin_cash = _extract_row_value(all_rows, "beginning of period")
+    v_end_cash = _extract_row_value(all_rows, "end of period")
 
-    # -- Row 2: Period label -------------------------------------------------
+    # Working capital = sum of AR + prepaids + other assets + AP +
+    # accrued + deferred.
+    v_wc = []
+    for i in range(num_months):
+        components = [
+            v_ar[i] if i < len(v_ar) else None,
+            v_prepaids[i] if i < len(v_prepaids) else None,
+            v_other_assets[i] if i < len(v_other_assets) else None,
+            v_ap[i] if i < len(v_ap) else None,
+            v_accrued[i] if i < len(v_accrued) else None,
+            v_deferred[i] if i < len(v_deferred) else None,
+        ]
+        non_none = [c for c in components if c is not None]
+        v_wc.append(round(sum(non_none), 2) if non_none else None)
+
+    # ── Compute key metrics ───────────────────────────────────────────
+    net_changes = [v for v in v_net_change if v is not None]
+    avg_monthly_burn = (
+        round(-sum(net_changes) / len(net_changes), 2)
+        if net_changes
+        else 0
+    )
+    op_totals = [v for v in v_op_total if v is not None]
+    avg_op_burn = (
+        round(-sum(op_totals) / len(op_totals), 2) if op_totals else 0
+    )
+    ending_cash = _last_available(v_end_cash)
+    beginning_cash_first = next(
+        (v for v in v_begin_cash if v is not None), None
+    )
+    qtr_net_change = _sum_available(v_net_change)
+    runway = (
+        round(ending_cash / avg_monthly_burn, 1)
+        if ending_cash and avg_monthly_burn > 0
+        else None
+    )
+
+    # ══════════════════════════════════════════════════════════════════
+    # Build workbook
+    # ══════════════════════════════════════════════════════════════════
+    wb = Workbook()
+
+    # ── Reusable styles ───────────────────────────────────────────────
+    num_fmt = '#,##0;(#,##0);"-"'
+    pct_fmt = '0.0%'
+    font_title = Font(bold=True, size=16, color="1A3C6E")
+    font_subtitle = Font(bold=True, size=12, color="333333")
+    font_section = Font(bold=True, size=11, color="1A3C6E")
+    font_bold = Font(bold=True)
+    font_bold_white = Font(bold=True, color="FFFFFF")
+    font_italic = Font(italic=True, color="666666")
+    font_normal = Font(size=10)
+    font_metric_label = Font(size=10, color="5F6368")
+    font_metric_val = Font(bold=True, size=14)
+    fill_header = PatternFill(
+        start_color="1A3C6E", end_color="1A3C6E", fill_type="solid"
+    )
+    fill_light_blue = PatternFill(
+        start_color="D6E4F0", end_color="D6E4F0", fill_type="solid"
+    )
+    fill_section = PatternFill(
+        start_color="E8EDF2", end_color="E8EDF2", fill_type="solid"
+    )
+    fill_subtotal = PatternFill(
+        start_color="F0F4F8", end_color="F0F4F8", fill_type="solid"
+    )
+    fill_metric = PatternFill(
+        start_color="F5F7FA", end_color="F5F7FA", fill_type="solid"
+    )
+    fill_green = PatternFill(
+        start_color="E8F5E9", end_color="E8F5E9", fill_type="solid"
+    )
+    fill_red = PatternFill(
+        start_color="FFEBEE", end_color="FFEBEE", fill_type="solid"
+    )
+    border_bottom = Border(bottom=Side(style="thin"))
+    border_top = Border(top=Side(style="thin"))
+    border_top_bottom = Border(
+        top=Side(style="thin"), bottom=Side(style="thin")
+    )
+    border_double = Border(
+        top=Side(style="thin"), bottom=Side(style="double")
+    )
+    align_right = Alignment(horizontal="right")
+    align_center = Alignment(horizontal="center")
+    align_left = Alignment(horizontal="left", indent=1)
+    align_left_2 = Alignment(horizontal="left", indent=2)
+
+    def _wv(cell, val, fmt=num_fmt):
+        """Write value: number or em-dash for None."""
+        if val is None:
+            cell.value = "\u2014"
+            cell.alignment = align_center
+            cell.font = Font(color="999999")
+        else:
+            cell.value = val
+            cell.number_format = fmt
+            cell.alignment = align_right
+
+    def _write_data_row(ws, r, desc, vals, total, bold=False,
+                        fill=None, indent=False, border=None):
+        """Write a full row with description + month values + total."""
+        dc = ws.cell(row=r, column=1, value=desc)
+        dc.font = font_bold if bold else font_normal
+        if indent:
+            dc.alignment = align_left
+        if fill:
+            dc.fill = fill
+        for i, v in enumerate(vals):
+            c = ws.cell(row=r, column=2 + i)
+            _wv(c, v)
+            if bold:
+                c.font = font_bold
+            if fill:
+                c.fill = fill
+            if border:
+                c.border = border
+        tc = ws.cell(row=r, column=num_cols)
+        _wv(tc, total)
+        if bold:
+            tc.font = font_bold
+        if fill:
+            tc.fill = fill
+        if border:
+            tc.border = border
+
+    def _set_col_widths(ws):
+        ws.column_dimensions["A"].width = 42
+        for ci in range(2, num_cols + 1):
+            ws.column_dimensions[get_column_letter(ci)].width = 18
+
+    # ══════════════════════════════════════════════════════════════════
+    # SHEET 1: Cash Burn Report
+    # ══════════════════════════════════════════════════════════════════
+    ws1 = wb.active
+    ws1.title = "Cash Burn Report"
+    _set_col_widths(ws1)
+    ws1.sheet_properties.tabColor = "1A73E8"
+
     first_m = months_meta[0]["month"]
     last_m = months_meta[-1]["month"]
     period_label = (
         f"Q{quarter} {year} "
-        f"({_MONTH_ABBREVS[first_m]} - {_MONTH_ABBREVS[last_m]})"
+        f"({_MONTH_ABBREVS[first_m]} \u2013 {_MONTH_ABBREVS[last_m]})"
     )
-    ws.merge_cells(
-        start_row=2, start_column=1, end_row=2, end_column=num_cols,
-    )
-    period_cell = ws.cell(row=2, column=1, value=period_label)
-    period_cell.font = Font(italic=True, size=11)
-    period_cell.alignment = Alignment(horizontal="center")
 
-    # -- Row 3: Amounts note -------------------------------------------------
-    ws.merge_cells(
-        start_row=3, start_column=1, end_row=3, end_column=num_cols,
-    )
-    note_cell = ws.cell(row=3, column=1, value="(amounts in thousands)")
-    note_cell.font = Font(italic=True, size=9)
-    note_cell.alignment = Alignment(horizontal="center")
+    # ── Title block ───────────────────────────────────────────────────
+    r = 1
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="Monthly Cash Burn Report")
+    c.font = font_title
+    r = 2
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value=period_label)
+    c.font = font_subtitle
+    r = 3
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="Amounts in thousands")
+    c.font = font_italic
 
-    # -- Row 4: blank --------------------------------------------------------
+    # ── Key Metrics bar (row 5-6) ─────────────────────────────────────
+    r = 5
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="KEY METRICS")
+    c.font = font_section
+    c.fill = fill_section
+    for ci in range(2, num_cols + 1):
+        ws1.cell(row=r, column=ci).fill = fill_section
 
-    # -- Row 5: Column headers -----------------------------------------------
-    header_font = Font(bold=True)
-    header_fill = PatternFill(
-        start_color="D6E4F0", end_color="D6E4F0", fill_type="solid",
-    )
-    header_border = Border(bottom=Side(style="thin"))
-
-    headers = ["Description"]
-    for m in months_meta:
-        headers.append(f"{_MONTH_ABBREVS[m['month']]} {m['year']}")
-    headers.append("Quarter Total")
-
-    for col_idx, hdr in enumerate(headers, start=1):
-        cell = ws.cell(row=5, column=col_idx, value=hdr)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.border = header_border
-        if col_idx > 1:
-            cell.alignment = Alignment(horizontal="center")
-
-    # -- Column widths -------------------------------------------------------
-    ws.column_dimensions["A"].width = 45
-    for col_idx in range(2, num_cols + 1):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 18
-
-    # -- Reusable styles for data rows ---------------------------------------
-    num_fmt = '#,##0;(#,##0);"-"'
-    section_fill = PatternFill(
-        start_color="E8EDF2", end_color="E8EDF2", fill_type="solid",
-    )
-    subtotal_fill = PatternFill(
-        start_color="F0F4F8", end_color="F0F4F8", fill_type="solid",
-    )
-    subtotal_border = Border(top=Side(style="thin"))
-    grand_border = Border(
-        top=Side(style="thin"), bottom=Side(style="double"),
-    )
-    right_align = Alignment(horizontal="right")
-    center_align = Alignment(horizontal="center")
-
-    def _write_value(cell, val, fmt=num_fmt):
-        """Write a numeric value or an em-dash for None."""
-        if val is None:
-            cell.value = "\u2014"
-            cell.alignment = center_align
+    # Metric labels on row 6, values on row 7.
+    metric_defs = [
+        ("Avg Monthly Burn", avg_monthly_burn, fill_red if avg_monthly_burn > 0 else fill_green),
+        ("Avg Operating Burn", avg_op_burn, fill_red if avg_op_burn > 0 else fill_green),
+        ("Ending Cash Position", ending_cash, fill_metric),
+        ("Estimated Runway", None, fill_metric),  # handled specially
+        ("Qtr Net Cash Change", qtr_net_change, fill_red if (qtr_net_change or 0) < 0 else fill_green),
+    ]
+    r = 6
+    for i, (label, val, bg) in enumerate(metric_defs):
+        col = i + 1
+        lc = ws1.cell(row=r, column=col, value=label)
+        lc.font = font_metric_label
+        lc.fill = bg
+        vc = ws1.cell(row=r + 1, column=col)
+        vc.fill = bg
+        if label == "Estimated Runway":
+            if runway is not None:
+                vc.value = f"{runway} months"
+            else:
+                vc.value = "N/A (not burning)"
+            vc.font = font_metric_val
         else:
-            cell.value = val
-            cell.number_format = fmt
-            cell.alignment = right_align
+            _wv(vc, val)
+            vc.font = font_metric_val
 
-    # -- Data rows (starting at row 6) --------------------------------------
-    current_row = 6
+    # ── Cash Position Summary (rows 9+) ──────────────────────────────
+    r = 9
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="CASH POSITION")
+    c.font = font_section
+    c.fill = fill_section
+    for ci in range(2, num_cols + 1):
+        ws1.cell(row=r, column=ci).fill = fill_section
 
-    for row_data in data_rows:
+    # Column headers.
+    r = 10
+    headers = [""] + month_headers + ["Quarter"]
+    for ci, h in enumerate(headers, 1):
+        c = ws1.cell(row=r, column=ci, value=h)
+        c.font = font_bold
+        c.border = border_bottom
+        c.fill = fill_light_blue
+        if ci > 1:
+            c.alignment = align_center
+
+    r = 11
+    _write_data_row(ws1, r, "Beginning Cash", v_begin_cash,
+                    beginning_cash_first, indent=True)
+    r = 12
+    _write_data_row(ws1, r, "Net Cash Change", v_net_change,
+                    _sum_available(v_net_change), indent=True)
+    r = 13
+    _write_data_row(ws1, r, "Ending Cash", v_end_cash,
+                    _last_available(v_end_cash), bold=True,
+                    border=border_double)
+
+    # ── Cash Flow Summary (rows 15+) ─────────────────────────────────
+    r = 15
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="CASH FLOW SUMMARY")
+    c.font = font_section
+    c.fill = fill_section
+    for ci in range(2, num_cols + 1):
+        ws1.cell(row=r, column=ci).fill = fill_section
+
+    r = 16
+    headers2 = [""] + month_headers + ["Quarter Total"]
+    for ci, h in enumerate(headers2, 1):
+        c = ws1.cell(row=r, column=ci, value=h)
+        c.font = font_bold
+        c.border = border_bottom
+        c.fill = fill_light_blue
+        if ci > 1:
+            c.alignment = align_center
+
+    r = 17
+    _write_data_row(ws1, r, "Cash from Operations", v_op_total,
+                    _sum_available(v_op_total), indent=True)
+    r = 18
+    _write_data_row(ws1, r, "Cash from Investing", v_inv_total,
+                    _sum_available(v_inv_total), indent=True)
+    r = 19
+    _write_data_row(ws1, r, "Cash from Financing", v_fin_total,
+                    _sum_available(v_fin_total), indent=True)
+    r = 20
+    _write_data_row(ws1, r, "Net Cash Flow", v_net_change,
+                    _sum_available(v_net_change), bold=True,
+                    fill=fill_subtotal, border=border_top)
+
+    # ── Operating Detail (rows 22+) ──────────────────────────────────
+    r = 22
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="OPERATING CASH FLOW DETAIL")
+    c.font = font_section
+    c.fill = fill_section
+    for ci in range(2, num_cols + 1):
+        ws1.cell(row=r, column=ci).fill = fill_section
+
+    r = 23
+    for ci, h in enumerate(headers2, 1):
+        c = ws1.cell(row=r, column=ci, value=h)
+        c.font = font_bold
+        c.border = border_bottom
+        c.fill = fill_light_blue
+        if ci > 1:
+            c.alignment = align_center
+
+    r = 24
+    _write_data_row(ws1, r, "Net Income", v_net_income,
+                    _sum_available(v_net_income), indent=True)
+    r = 25
+    _write_data_row(ws1, r, "Depreciation & Amortization", v_da,
+                    _sum_available(v_da), indent=True)
+    r = 26
+    _write_data_row(ws1, r, "Working Capital Changes", v_wc,
+                    _sum_available(v_wc), indent=True)
+
+    # Working capital breakdown (indented further).
+    wc_items = [
+        ("Accounts Receivable", v_ar),
+        ("Prepaid Expenses & Other", v_prepaids),
+        ("Other Assets", v_other_assets),
+        ("Accounts Payable", v_ap),
+        ("Accrued Expenses & Other Liabilities", v_accrued),
+        ("Deferred Revenue", v_deferred),
+    ]
+    r = 27
+    for label, vals in wc_items:
+        dc = ws1.cell(row=r, column=1, value=label)
+        dc.font = Font(size=10, color="666666")
+        dc.alignment = align_left_2
+        for i, v in enumerate(vals[:num_months]):
+            c = ws1.cell(row=r, column=2 + i)
+            _wv(c, v)
+            c.font = Font(size=10, color="666666")
+        tc = ws1.cell(row=r, column=num_cols)
+        _wv(tc, _sum_available(vals[:num_months]))
+        tc.font = Font(size=10, color="666666")
+        r += 1
+
+    _write_data_row(ws1, r, "Net Cash from Operations", v_op_total,
+                    _sum_available(v_op_total), bold=True,
+                    fill=fill_subtotal, border=border_double)
+
+    # ── Investing & Financing detail ─────────────────────────────────
+    r += 2
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(row=r, column=1, value="INVESTING & FINANCING DETAIL")
+    c.font = font_section
+    c.fill = fill_section
+    for ci in range(2, num_cols + 1):
+        ws1.cell(row=r, column=ci).fill = fill_section
+
+    r += 1
+    for ci, h in enumerate(headers2, 1):
+        c = ws1.cell(row=r, column=ci, value=h)
+        c.font = font_bold
+        c.border = border_bottom
+        c.fill = fill_light_blue
+        if ci > 1:
+            c.alignment = align_center
+
+    r += 1
+    _write_data_row(ws1, r, "Capital Expenditures", v_capex,
+                    _sum_available(v_capex), indent=True)
+    r += 1
+    _write_data_row(ws1, r, "Net Cash from Investing", v_inv_total,
+                    _sum_available(v_inv_total), bold=True,
+                    border=border_top)
+    r += 1  # blank
+    r += 1
+    _write_data_row(ws1, r, "Stock Issuance Proceeds", v_stock,
+                    _sum_available(v_stock), indent=True)
+    r += 1
+    _write_data_row(ws1, r, "Other Equity Transactions", v_equity,
+                    _sum_available(v_equity), indent=True)
+    r += 1
+    _write_data_row(ws1, r, "Net Cash from Financing", v_fin_total,
+                    _sum_available(v_fin_total), bold=True,
+                    border=border_top)
+
+    # ── Confidentiality footer ───────────────────────────────────────
+    r += 2
+    ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws1.cell(
+        row=r, column=1,
+        value="CONFIDENTIAL — For intended recipients only. "
+              "Do not distribute without permission.",
+    )
+    c.font = Font(italic=True, size=8, color="999999")
+
+    # Print setup.
+    ws1.print_title_rows = "1:3"
+    ws1.page_setup.orientation = "landscape"
+    ws1.page_setup.fitToWidth = 1
+
+    # ══════════════════════════════════════════════════════════════════
+    # SHEET 2: Detailed Cash Flows (full SCF)
+    # ══════════════════════════════════════════════════════════════════
+    ws2 = wb.create_sheet(title="Detailed Cash Flows")
+    _set_col_widths(ws2)
+    ws2.sheet_properties.tabColor = "5F6368"
+
+    r = 1
+    ws2.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws2.cell(row=r, column=1, value="Condensed Statement of Cash Flows")
+    c.font = Font(bold=True, size=14)
+    r = 2
+    ws2.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws2.cell(row=r, column=1, value=period_label)
+    c.font = Font(italic=True, size=11)
+    r = 3
+    ws2.merge_cells(start_row=r, start_column=1, end_row=r, end_column=num_cols)
+    c = ws2.cell(row=r, column=1, value="(amounts in thousands, unaudited)")
+    c.font = font_italic
+
+    r = 5
+    for ci, h in enumerate(headers2, 1):
+        c = ws2.cell(row=r, column=ci, value=h)
+        c.font = font_bold_white
+        c.fill = fill_header
+        c.border = border_bottom
+        if ci > 1:
+            c.alignment = align_center
+
+    r = 6
+    for row_data in all_rows:
         desc = row_data["description"]
         row_type = row_data["type"]
         values = row_data.get("values", [])
         total = row_data.get("total")
 
-        desc_cell = ws.cell(row=current_row, column=1)
+        dc = ws2.cell(row=r, column=1)
 
         if row_type == "section_header":
-            desc_cell.value = desc
-            desc_cell.font = Font(bold=True)
-            desc_cell.fill = section_fill
+            dc.value = desc
+            dc.font = font_bold
+            dc.fill = fill_section
             for ci in range(2, num_cols + 1):
-                ws.cell(row=current_row, column=ci).fill = section_fill
+                ws2.cell(row=r, column=ci).fill = fill_section
 
         elif row_type == "subsection":
-            desc_cell.value = f"  {desc}"
-            desc_cell.font = Font(italic=True)
+            dc.value = f"  {desc}"
+            dc.font = Font(italic=True)
 
         elif row_type == "line":
-            desc_cell.value = f"  {desc}"
+            dc.value = f"  {desc}"
             for i, val in enumerate(values):
-                _write_value(ws.cell(row=current_row, column=2 + i), val)
-            _write_value(
-                ws.cell(row=current_row, column=num_cols), total,
-            )
+                _wv(ws2.cell(row=r, column=2 + i), val)
+            _wv(ws2.cell(row=r, column=num_cols), total)
 
         elif row_type == "subtotal":
-            desc_cell.value = desc
-            desc_cell.font = Font(bold=True)
-            desc_cell.fill = subtotal_fill
+            dc.value = desc
+            dc.font = font_bold
+            dc.fill = fill_subtotal
             for i, val in enumerate(values):
-                cell = ws.cell(row=current_row, column=2 + i)
-                cell.fill = subtotal_fill
-                cell.border = subtotal_border
-                _write_value(cell, val)
-            total_cell = ws.cell(row=current_row, column=num_cols)
-            total_cell.fill = subtotal_fill
-            total_cell.border = subtotal_border
-            _write_value(total_cell, total)
+                c = ws2.cell(row=r, column=2 + i)
+                c.fill = fill_subtotal
+                c.border = border_top
+                _wv(c, val)
+                c.font = font_bold
+            tc = ws2.cell(row=r, column=num_cols)
+            tc.fill = fill_subtotal
+            tc.border = border_top
+            _wv(tc, total)
+            tc.font = font_bold
 
         elif row_type == "grand_total":
-            desc_cell.value = desc
-            desc_cell.font = Font(bold=True)
-            desc_lower = desc.lower()
-            is_beginning = (
-                desc_lower
-                == "cash and cash equivalents at beginning of period"
-            )
-            is_ending = (
-                desc_lower
-                == "cash and cash equivalents at end of period"
-            )
-
+            dc.value = desc
+            dc.font = font_bold
+            dl = desc.lower()
             for i, val in enumerate(values):
-                cell = ws.cell(row=current_row, column=2 + i)
-                cell.border = grand_border
-                _write_value(cell, val)
-
-            total_cell = ws.cell(row=current_row, column=num_cols)
-            total_cell.border = grand_border
-            if is_beginning:
-                total_cell.value = "\u2014"
-                total_cell.alignment = center_align
-            elif is_ending:
-                # Show last available month's value instead of the sum.
-                last_val = None
-                for v in reversed(values):
-                    if v is not None:
-                        last_val = v
-                        break
-                _write_value(total_cell, last_val)
+                c = ws2.cell(row=r, column=2 + i)
+                c.border = border_double
+                _wv(c, val)
+                c.font = font_bold
+            tc = ws2.cell(row=r, column=num_cols)
+            tc.border = border_double
+            tc.font = font_bold
+            if "beginning" in dl:
+                tc.value = "\u2014"
+                tc.alignment = align_center
+            elif "end" in dl:
+                _wv(tc, _last_available(values))
+                tc.font = font_bold
             else:
-                _write_value(total_cell, total)
+                _wv(tc, total)
+                tc.font = font_bold
 
-        current_row += 1
+        r += 1
 
-    # -- Stream the workbook back as a download ------------------------------
+    # ── Stream the workbook ───────────────────────────────────────────
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
-    filename = f"SCF_Q{quarter}_{year}.xlsx"
+    filename = f"Cash_Burn_Report_Q{quarter}_{year}.xlsx"
     return send_file(
         output,
         mimetype=(
