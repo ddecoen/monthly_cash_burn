@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monthly Cash Burn Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ── CSS Variables / Theming ─────────────────────────────── */
+    :root {
+      --color-primary: #1a73e8;
+      --color-primary-hover: #1557b0;
+      --color-primary-light: #e8f0fe;
+      --color-danger: #e53935;
+      --color-danger-hover: #c62828;
+      --color-success: #43a047;
+      --color-success-light: #e8f5e9;
+      --color-warning: #fb8c00;
+      --color-bg: #f5f7fa;
+      --color-card: #ffffff;
+      --color-text: #333333;
+      --color-text-secondary: #5f6368;
+      --color-border: #dadce0;
+      --color-input-bg: #f8f9fa;
+      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+      --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      --transition-fast: 0.15s ease;
+      --transition-normal: 0.25s ease;
+    }
+
+    /* ── Reset & Base ────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-family);
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    .header {
+      background: linear-gradient(135deg, var(--color-primary), #1557b0);
+      color: #fff;
+      padding: 1.5rem 2rem;
+      box-shadow: var(--shadow-md);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .header-subtitle {
+      font-size: 0.875rem;
+      opacity: 0.85;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────── */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ── Card ────────────────────────────────────────────────── */
+    .card {
+      background: var(--color-card);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--color-border);
+      overflow: hidden;
+      transition: box-shadow var(--transition-normal);
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--color-border);
+      font-weight: 600;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-header .icon {
+      font-size: 1.15rem;
+    }
+
+    .card-body {
+      padding: 1.25rem;
+    }
+
+    /* ── Form ────────────────────────────────────────────────── */
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.3rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-input,
+    .form-select {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.9rem;
+      font-family: var(--font-family);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-input-bg);
+      color: var(--color-text);
+      transition: border-color var(--transition-fast),
+        box-shadow var(--transition-fast);
+    }
+
+    .form-input:focus,
+    .form-select:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+      background: #fff;
+    }
+
+    .form-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-primary);
+      margin: 1.25rem 0 0.6rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 2px solid var(--color-primary-light);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 0.65rem 1.25rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: var(--font-family);
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background var(--transition-fast),
+        transform var(--transition-fast),
+        box-shadow var(--transition-fast);
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-primary {
+      background: var(--color-primary);
+      color: #fff;
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      background: var(--color-primary-hover);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--color-danger);
+      padding: 0.3rem 0.6rem;
+      font-size: 0.8rem;
+      border: 1px solid var(--color-danger);
+      border-radius: var(--radius-sm);
+    }
+
+    .btn-danger:hover {
+      background: var(--color-danger);
+      color: #fff;
+    }
+
+    /* ── Summary Cards ───────────────────────────────────────── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .metric-card {
+      background: var(--color-card);
+      border-radius: var(--radius-md);
+      padding: 1.15rem 1.25rem;
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--color-border);
+      transition: box-shadow var(--transition-normal),
+        transform var(--transition-normal);
+    }
+
+    .metric-card:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.35rem;
+    }
+
+    .metric-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .metric-value.burn {
+      color: var(--color-danger);
+    }
+
+    .metric-value.positive {
+      color: var(--color-success);
+    }
+
+    .metric-value.neutral {
+      color: var(--color-primary);
+    }
+
+    .metric-sub {
+      font-size: 0.78rem;
+      color: var(--color-text-secondary);
+      margin-top: 0.2rem;
+    }
+
+    /* ── Runway Input ────────────────────────────────────────── */
+    .runway-input-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .runway-input-row label {
+      font-weight: 600;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    .runway-input-row .form-input {
+      max-width: 220px;
+    }
+
+    /* ── Charts ──────────────────────────────────────────────── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .charts-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-wrapper {
+      position: relative;
+      width: 100%;
+      padding: 0.5rem;
+    }
+
+    .chart-wrapper canvas {
+      max-height: 320px;
+    }
+
+    /* ── Data Table ──────────────────────────────────────────── */
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    thead th {
+      background: var(--color-bg);
+      padding: 0.7rem 0.9rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--color-text-secondary);
+      border-bottom: 2px solid var(--color-border);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 0.7rem 0.9rem;
+      border-bottom: 1px solid var(--color-border);
+      white-space: nowrap;
+    }
+
+    tbody tr:hover {
+      background: var(--color-primary-light);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .text-right {
+      text-align: right;
+    }
+
+    .text-center {
+      text-align: center;
+    }
+
+    .text-danger {
+      color: var(--color-danger);
+      font-weight: 600;
+    }
+
+    .text-success {
+      color: var(--color-success);
+      font-weight: 600;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--color-text-secondary);
+    }
+
+    .empty-state .icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .empty-state p {
+      font-size: 0.95rem;
+    }
+
+    /* ── Toast Notification ──────────────────────────────────── */
+    .toast-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toast {
+      padding: 0.75rem 1.25rem;
+      border-radius: var(--radius-sm);
+      color: #fff;
+      font-size: 0.88rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+      max-width: 360px;
+    }
+
+    .toast.success {
+      background: var(--color-success);
+    }
+
+    .toast.error {
+      background: var(--color-danger);
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to   { transform: translateX(0);    opacity: 1; }
+    }
+
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to   { opacity: 0; }
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Currency prefix ─────────────────────────────────────── */
+    .currency-wrap {
+      position: relative;
+    }
+
+    .currency-wrap .currency-sign {
+      position: absolute;
+      left: 0.7rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-text-secondary);
+      font-size: 0.88rem;
+      pointer-events: none;
+    }
+
+    .currency-wrap .form-input {
+      padding-left: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- ═══ Header ═══ -->
+  <header class="header">
+    <div class="header-inner">
+      <div>
+        <h1>📊 Monthly Cash Burn Tracker</h1>
+        <span class="header-subtitle">Track expenses, monitor burn rate, and plan your runway</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="dashboard-grid">
+      <!-- ═══ Left Column — Entry Form ═══ -->
+      <div>
+        <div class="card">
+          <div class="card-header"><span class="icon">➕</span> Add Monthly Entry</div>
+          <div class="card-body">
+            <form id="entryForm" autocomplete="off">
+              <!-- Period -->
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="month">Month</label>
+                  <select class="form-select" id="month" required>
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="year">Year</label>
+                  <input class="form-input" type="number" id="year" min="2000" max="2100" required>
+                </div>
+              </div>
+
+              <!-- Revenue -->
+              <div class="form-section-title">Revenue</div>
+              <div class="form-group">
+                <label class="form-label" for="revenue">Monthly Revenue</label>
+                <div class="currency-wrap">
+                  <span class="currency-sign">$</span>
+                  <input class="form-input" type="number" id="revenue" min="0" step="0.01" value="0" required>
+                </div>
+              </div>
+
+              <!-- Expenses -->
+              <div class="form-section-title">Expenses</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="payroll">Payroll</label>
+                  <div class="currency-wrap">
+                    <span class="currency-sign">$</span>
+                    <input class="form-input" type="number" id="payroll" min="0" step="0.01" value="0" required>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="rent">Rent</label>
+                  <div class="currency-wrap">
+                    <span class="currency-sign">$</span>
+                    <input class="form-input" type="number" id="rent" min="0" step="0.01" value="0" required>
+                  </div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="marketing">Marketing</label>
+                  <div class="currency-wrap">
+                    <span class="currency-sign">$</span>
+                    <input class="form-input" type="number" id="marketing" min="0" step="0.01" value="0" required>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="software">Software / Tools</label>
+                  <div class="currency-wrap">
+                    <span class="currency-sign">$</span>
+                    <input class="form-input" type="number" id="software" min="0" step="0.01" value="0" required>
+                  </div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="professional">Prof. Services</label>
+                  <div class="currency-wrap">
+                    <span class="currency-sign">$</span>
+                    <input class="form-input" type="number" id="professional" min="0" step="0.01" value="0" required>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="other">Other</label>
+                  <div class="currency-wrap">
+                    <span class="currency-sign">$</span>
+                    <input class="form-input" type="number" id="other" min="0" step="0.01" value="0" required>
+                  </div>
+                </div>
+              </div>
+
+              <button class="btn btn-primary" type="submit" id="submitBtn" style="margin-top: 1rem;">
+                Add Entry
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Right Column — Dashboard ═══ -->
+      <div>
+        <!-- Runway input + Summary cards -->
+        <div class="runway-input-row">
+          <label for="cashOnHand">💰 Cash on Hand:</label>
+          <div class="currency-wrap">
+            <span class="currency-sign">$</span>
+            <input class="form-input" type="number" id="cashOnHand" min="0" step="0.01"
+                   value="0" placeholder="e.g. 500000">
+          </div>
+        </div>
+
+        <div class="summary-grid" id="summaryGrid">
+          <div class="metric-card">
+            <div class="metric-label">Avg Monthly Burn</div>
+            <div class="metric-value burn" id="metricAvgBurn">$0</div>
+            <div class="metric-sub">Net cash spent per month</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Total Cash Burned</div>
+            <div class="metric-value burn" id="metricTotalBurn">$0</div>
+            <div class="metric-sub">Cumulative net spend</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Months Tracked</div>
+            <div class="metric-value neutral" id="metricMonths">0</div>
+            <div class="metric-sub">Data entries recorded</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Est. Runway</div>
+            <div class="metric-value positive" id="metricRunway">∞</div>
+            <div class="metric-sub">Months until cash runs out</div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-row">
+          <div class="card">
+            <div class="card-header"><span class="icon">📈</span> Cash Burn Over Time</div>
+            <div class="card-body">
+              <div class="chart-wrapper">
+                <canvas id="burnChart"></canvas>
+              </div>
+              <div class="empty-state" id="burnChartEmpty">
+                <div class="icon">📉</div>
+                <p>Add entries to see your burn chart</p>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><span class="icon">🍩</span> Expense Breakdown</div>
+            <div class="card-body">
+              <div class="chart-wrapper">
+                <canvas id="expenseChart"></canvas>
+              </div>
+              <div class="empty-state" id="expenseChartEmpty">
+                <div class="icon">📊</div>
+                <p>Add entries to see expense breakdown</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="card">
+          <div class="card-header"><span class="icon">📋</span> All Entries</div>
+          <div class="card-body" style="padding: 0;">
+            <div class="table-wrapper">
+              <table id="entriesTable">
+                <thead>
+                  <tr>
+                    <th>Period</th>
+                    <th class="text-right">Revenue</th>
+                    <th class="text-right">Payroll</th>
+                    <th class="text-right">Rent</th>
+                    <th class="text-right">Marketing</th>
+                    <th class="text-right">Software</th>
+                    <th class="text-right">Prof. Svc</th>
+                    <th class="text-right">Other</th>
+                    <th class="text-right">Total Exp.</th>
+                    <th class="text-right">Cash Burn</th>
+                    <th class="text-center">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="entriesBody"></tbody>
+              </table>
+            </div>
+            <div class="empty-state" id="tableEmpty">
+              <div class="icon">📭</div>
+              <p>No entries yet — add your first month above</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    /* ── Constants & State ──────────────────────────────────── */
+    const MONTH_NAMES = [
+      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+
+    const EXPENSE_CATEGORIES = [
+      { key: 'payroll',      label: 'Payroll',        color: '#1a73e8' },
+      { key: 'rent',         label: 'Rent',           color: '#fb8c00' },
+      { key: 'marketing',    label: 'Marketing',      color: '#8e24aa' },
+      { key: 'software',     label: 'Software/Tools', color: '#00acc1' },
+      { key: 'professional', label: 'Prof. Services', color: '#43a047' },
+      { key: 'other',        label: 'Other',          color: '#78909c' },
+    ];
+
+    let entries = [];
+    let burnChart = null;
+    let expenseChart = null;
+
+    /* ── Helpers ────────────────────────────────────────────── */
+    function formatCurrency(value) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(value);
+    }
+
+    function formatCurrencyDecimals(value) {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function totalExpenses(entry) {
+      return (
+        (entry.payroll || 0) +
+        (entry.rent || 0) +
+        (entry.marketing || 0) +
+        (entry.software || 0) +
+        (entry.professional || 0) +
+        (entry.other || 0)
+      );
+    }
+
+    function cashBurn(entry) {
+      return totalExpenses(entry) - (entry.revenue || 0);
+    }
+
+    function sortedEntries() {
+      return [...entries].sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
+      });
+    }
+
+    /* ── API Layer ──────────────────────────────────────────── */
+    async function fetchEntries() {
+      try {
+        const res = await fetch('/api/entries');
+        if (!res.ok) throw new Error('Failed to fetch entries');
+        entries = await res.json();
+        if (!Array.isArray(entries)) entries = [];
+      } catch (err) {
+        console.error(err);
+        entries = [];
+      }
+    }
+
+    async function submitEntry(data) {
+      const res = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to create entry');
+      }
+      return res.json();
+    }
+
+    async function deleteEntry(id) {
+      const res = await fetch(`/api/entries/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete entry');
+    }
+
+    async function fetchSummary(cashOnHand) {
+      try {
+        const res = await fetch(`/api/summary?cash_on_hand=${cashOnHand}`);
+        if (!res.ok) throw new Error('Failed to fetch summary');
+        return await res.json();
+      } catch {
+        return null;
+      }
+    }
+
+    /* ── Render: Summary Cards ─────────────────────────────── */
+    async function renderSummary() {
+      const cashOnHand = parseFloat(document.getElementById('cashOnHand').value) || 0;
+      const summary = await fetchSummary(cashOnHand);
+
+      if (summary) {
+        document.getElementById('metricAvgBurn').textContent =
+          formatCurrency(summary.average_burn || 0);
+        document.getElementById('metricTotalBurn').textContent =
+          formatCurrency(summary.total_burn || 0);
+        document.getElementById('metricMonths').textContent =
+          summary.months_tracked || 0;
+
+        const runway = summary.runway_months;
+        const runwayEl = document.getElementById('metricRunway');
+        if (runway === null || runway === undefined || runway < 0 || !isFinite(runway)) {
+          runwayEl.textContent = '∞';
+          runwayEl.className = 'metric-value positive';
+        } else {
+          runwayEl.textContent = `${runway.toFixed(1)} mo`;
+          runwayEl.className = runway > 12
+            ? 'metric-value positive'
+            : runway > 6
+              ? 'metric-value neutral'
+              : 'metric-value burn';
+        }
+      } else {
+        // Compute locally as fallback.
+        const sorted = sortedEntries();
+        const burns = sorted.map(cashBurn);
+        const totalBurn = burns.reduce((s, v) => s + v, 0);
+        const avgBurn = burns.length ? totalBurn / burns.length : 0;
+
+        document.getElementById('metricAvgBurn').textContent = formatCurrency(avgBurn);
+        document.getElementById('metricTotalBurn').textContent = formatCurrency(totalBurn);
+        document.getElementById('metricMonths').textContent = sorted.length;
+
+        const runwayEl = document.getElementById('metricRunway');
+        if (avgBurn <= 0 || cashOnHand <= 0) {
+          runwayEl.textContent = avgBurn <= 0 && sorted.length > 0 ? '∞' : '∞';
+          runwayEl.className = 'metric-value positive';
+        } else {
+          const months = cashOnHand / avgBurn;
+          runwayEl.textContent = `${months.toFixed(1)} mo`;
+          runwayEl.className = months > 12
+            ? 'metric-value positive'
+            : months > 6
+              ? 'metric-value neutral'
+              : 'metric-value burn';
+        }
+      }
+    }
+
+    /* ── Render: Burn Chart ────────────────────────────────── */
+    function renderBurnChart() {
+      const sorted = sortedEntries();
+      const canvas = document.getElementById('burnChart');
+      const emptyEl = document.getElementById('burnChartEmpty');
+
+      if (!sorted.length) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = '';
+        if (burnChart) { burnChart.destroy(); burnChart = null; }
+        return;
+      }
+
+      canvas.style.display = '';
+      emptyEl.style.display = 'none';
+
+      const labels = sorted.map(e => `${MONTH_NAMES[e.month]} ${e.year}`);
+      const revenueData = sorted.map(e => e.revenue || 0);
+      const expenseData = sorted.map(e => totalExpenses(e));
+      const burnData = sorted.map(e => cashBurn(e));
+
+      const data = {
+        labels,
+        datasets: [
+          {
+            type: 'bar',
+            label: 'Revenue',
+            data: revenueData,
+            backgroundColor: 'rgba(67, 160, 71, 0.7)',
+            borderColor: '#43a047',
+            borderWidth: 1,
+            borderRadius: 3,
+            order: 2,
+          },
+          {
+            type: 'bar',
+            label: 'Total Expenses',
+            data: expenseData,
+            backgroundColor: 'rgba(229, 57, 53, 0.7)',
+            borderColor: '#e53935',
+            borderWidth: 1,
+            borderRadius: 3,
+            order: 2,
+          },
+          {
+            type: 'line',
+            label: 'Net Cash Burn',
+            data: burnData,
+            borderColor: '#1a73e8',
+            backgroundColor: 'rgba(26, 115, 232, 0.1)',
+            pointBackgroundColor: '#1a73e8',
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            borderWidth: 2.5,
+            tension: 0.3,
+            fill: true,
+            order: 1,
+          },
+        ],
+      };
+
+      if (burnChart) burnChart.destroy();
+
+      burnChart = new Chart(canvas, {
+        type: 'bar',
+        data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${formatCurrencyDecimals(ctx.parsed.y)}`,
+              },
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => formatCurrency(v) },
+              grid: { color: 'rgba(0,0,0,0.05)' },
+            },
+            x: {
+              grid: { display: false },
+            },
+          },
+        },
+      });
+    }
+
+    /* ── Render: Expense Breakdown Doughnut ────────────────── */
+    function renderExpenseChart() {
+      const canvas = document.getElementById('expenseChart');
+      const emptyEl = document.getElementById('expenseChartEmpty');
+
+      if (!entries.length) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = '';
+        if (expenseChart) { expenseChart.destroy(); expenseChart = null; }
+        return;
+      }
+
+      // Aggregate categories across all entries.
+      const totals = EXPENSE_CATEGORIES.map(cat =>
+        entries.reduce((sum, e) => sum + (e[cat.key] || 0), 0)
+      );
+
+      // Hide chart if all zeros.
+      if (totals.every(v => v === 0)) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = '';
+        if (expenseChart) { expenseChart.destroy(); expenseChart = null; }
+        return;
+      }
+
+      canvas.style.display = '';
+      emptyEl.style.display = 'none';
+
+      const data = {
+        labels: EXPENSE_CATEGORIES.map(c => c.label),
+        datasets: [{
+          data: totals,
+          backgroundColor: EXPENSE_CATEGORIES.map(c => c.color),
+          hoverOffset: 6,
+          borderWidth: 2,
+          borderColor: '#fff',
+        }],
+      };
+
+      if (expenseChart) expenseChart.destroy();
+
+      expenseChart = new Chart(canvas, {
+        type: 'doughnut',
+        data,
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          cutout: '55%',
+          plugins: {
+            legend: { position: 'bottom', labels: { padding: 14, usePointStyle: true } },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                  const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+                  return `${ctx.label}: ${formatCurrencyDecimals(ctx.parsed)} (${pct}%)`;
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    /* ── Render: Data Table ────────────────────────────────── */
+    function renderTable() {
+      const tbody = document.getElementById('entriesBody');
+      const emptyEl = document.getElementById('tableEmpty');
+      const table = document.getElementById('entriesTable');
+      const sorted = sortedEntries();
+
+      if (!sorted.length) {
+        table.style.display = 'none';
+        emptyEl.style.display = '';
+        return;
+      }
+
+      table.style.display = '';
+      emptyEl.style.display = 'none';
+
+      tbody.innerHTML = sorted.map(e => {
+        const total = totalExpenses(e);
+        const burn = cashBurn(e);
+        const burnClass = burn > 0 ? 'text-danger' : burn < 0 ? 'text-success' : '';
+        return `
+          <tr>
+            <td>${MONTH_NAMES[e.month]} ${e.year}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.revenue || 0)}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.payroll || 0)}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.rent || 0)}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.marketing || 0)}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.software || 0)}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.professional || 0)}</td>
+            <td class="text-right">${formatCurrencyDecimals(e.other || 0)}</td>
+            <td class="text-right" style="font-weight:600;">${formatCurrencyDecimals(total)}</td>
+            <td class="text-right ${burnClass}">${formatCurrencyDecimals(burn)}</td>
+            <td class="text-center">
+              <button class="btn btn-danger" onclick="handleDelete('${e.id}')">Delete</button>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    /* ── Full Refresh ──────────────────────────────────────── */
+    async function refreshAll() {
+      await fetchEntries();
+      renderBurnChart();
+      renderExpenseChart();
+      renderTable();
+      await renderSummary();
+    }
+
+    /* ── Event Handlers ────────────────────────────────────── */
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+      const data = {
+        month: parseInt(document.getElementById('month').value, 10),
+        year: parseInt(document.getElementById('year').value, 10),
+        revenue: parseFloat(document.getElementById('revenue').value) || 0,
+        payroll: parseFloat(document.getElementById('payroll').value) || 0,
+        rent: parseFloat(document.getElementById('rent').value) || 0,
+        marketing: parseFloat(document.getElementById('marketing').value) || 0,
+        software: parseFloat(document.getElementById('software').value) || 0,
+        professional: parseFloat(document.getElementById('professional').value) || 0,
+        other: parseFloat(document.getElementById('other').value) || 0,
+      };
+
+      try {
+        await submitEntry(data);
+        showToast(`Entry for ${MONTH_NAMES[data.month]} ${data.year} added!`);
+        // Reset expense and revenue fields but keep month/year for quick
+        // sequential entry.
+        document.getElementById('revenue').value = '0';
+        document.getElementById('payroll').value = '0';
+        document.getElementById('rent').value = '0';
+        document.getElementById('marketing').value = '0';
+        document.getElementById('software').value = '0';
+        document.getElementById('professional').value = '0';
+        document.getElementById('other').value = '0';
+        await refreshAll();
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Add Entry';
+      }
+    }
+
+    async function handleDelete(id) {
+      if (!confirm('Delete this entry?')) return;
+      try {
+        await deleteEntry(id);
+        showToast('Entry deleted');
+        await refreshAll();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    /* ── Cash-on-Hand live update ──────────────────────────── */
+    let cohTimeout = null;
+    document.getElementById('cashOnHand').addEventListener('input', () => {
+      clearTimeout(cohTimeout);
+      cohTimeout = setTimeout(renderSummary, 300);
+    });
+
+    /* ── Initialization ────────────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', () => {
+      // Set default month/year to current.
+      const now = new Date();
+      document.getElementById('month').value = now.getMonth() + 1;
+      document.getElementById('year').value = now.getFullYear();
+
+      document.getElementById('entryForm').addEventListener('submit', handleSubmit);
+      refreshAll();
+    });
+  </script>
+</body>
+</html>
