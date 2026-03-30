@@ -24,17 +24,32 @@ teams that need a quick, self-hosted view of their financial runway.
 ## Quickstart
 
 ```bash
-cd /home/coder/monthly_cash_burn
-
-# Install dependencies (ideally in a virtualenv).
+git clone https://github.com/ddecoen/monthly_cash_burn.git
+cd monthly_cash_burn
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# Run the app.
-python app.py
+python3 app.py
 ```
 
-The server starts on **http://0.0.0.0:5000**. Open that URL in a browser
+The server starts on **http://localhost:5000**. Open that URL in a browser
 to use the web interface.
+
+## Updating to the Latest Version
+
+If you already have the repo cloned, pull the latest changes and restart:
+
+```bash
+cd monthly_cash_burn
+source .venv/bin/activate
+git pull origin main
+pip install -r requirements.txt   # pick up any new dependencies
+python3 app.py
+```
+
+> **Note:** Your data is stored in `cash_burn.db` locally and is not
+> affected by pulling updates. The `.gitignore` keeps it out of version
+> control.
 
 ## API Endpoints
 
@@ -104,9 +119,6 @@ monthly_cash_burn/
 ├── cash_burn.db         # SQLite database (created at runtime)
 ├── requirements.txt     # Python dependencies
 ├── README.md            # This file
-├── templates/
-│   └── index.html       # Main page template
-└── static/
-    ├── style.css        # Styles
-    └── app.js           # Client-side JavaScript
+└── templates/
+    └── index.html       # Dashboard UI (self-contained)
 ```
