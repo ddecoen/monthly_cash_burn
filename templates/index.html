@@ -1,1141 +1,1302 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monthly Cash Burn Tracker</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    /* ── CSS Variables / Theming ─────────────────────────────── */
-    :root {
-      --color-primary: #1a73e8;
-      --color-primary-hover: #1557b0;
-      --color-primary-light: #e8f0fe;
-      --color-danger: #e53935;
-      --color-danger-hover: #c62828;
-      --color-success: #43a047;
-      --color-success-light: #e8f5e9;
-      --color-warning: #fb8c00;
-      --color-bg: #f5f7fa;
-      --color-card: #ffffff;
-      --color-text: #333333;
-      --color-text-secondary: #5f6368;
-      --color-border: #dadce0;
-      --color-input-bg: #f8f9fa;
-      --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-      --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-      --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-        Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-      --transition-fast: 0.15s ease;
-      --transition-normal: 0.25s ease;
-    }
-
-    /* ── Reset & Base ────────────────────────────────────────── */
-    *,
-    *::before,
-    *::after {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      font-size: 16px;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-
-    body {
-      font-family: var(--font-family);
-      background-color: var(--color-bg);
-      color: var(--color-text);
-      line-height: 1.6;
-      min-height: 100vh;
-    }
-
-    /* ── Header ──────────────────────────────────────────────── */
-    .header {
-      background: linear-gradient(135deg, var(--color-primary), #1557b0);
-      color: #fff;
-      padding: 1.5rem 2rem;
-      box-shadow: var(--shadow-md);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .header-inner {
-      max-width: 1280px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    .header h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .header-subtitle {
-      font-size: 0.875rem;
-      opacity: 0.85;
-    }
-
-    /* ── Layout ──────────────────────────────────────────────── */
-    .container {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 1.5rem;
-    }
-
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: 380px 1fr;
-      gap: 1.5rem;
-      align-items: start;
-    }
-
-    @media (max-width: 960px) {
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* ── Card ────────────────────────────────────────────────── */
-    .card {
-      background: var(--color-card);
-      border-radius: var(--radius-md);
-      box-shadow: var(--shadow-sm);
-      border: 1px solid var(--color-border);
-      overflow: hidden;
-      transition: box-shadow var(--transition-normal);
-    }
-
-    .card:hover {
-      box-shadow: var(--shadow-md);
-    }
-
-    .card-header {
-      padding: 1rem 1.25rem;
-      border-bottom: 1px solid var(--color-border);
-      font-weight: 600;
-      font-size: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .card-header .icon {
-      font-size: 1.15rem;
-    }
-
-    .card-body {
-      padding: 1.25rem;
-    }
-
-    /* ── Form ────────────────────────────────────────────────── */
-    .form-group {
-      margin-bottom: 1rem;
-    }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.75rem;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--color-text-secondary);
-      margin-bottom: 0.3rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .form-input,
-    .form-select {
-      width: 100%;
-      padding: 0.6rem 0.75rem;
-      font-size: 0.9rem;
-      font-family: var(--font-family);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      background: var(--color-input-bg);
-      color: var(--color-text);
-      transition: border-color var(--transition-fast),
-        box-shadow var(--transition-fast);
-    }
-
-    .form-input:focus,
-    .form-select:focus {
-      outline: none;
-      border-color: var(--color-primary);
-      box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
-      background: #fff;
-    }
-
-    .form-section-title {
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--color-primary);
-      margin: 1.25rem 0 0.6rem;
-      padding-bottom: 0.35rem;
-      border-bottom: 2px solid var(--color-primary-light);
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.4rem;
-      padding: 0.65rem 1.25rem;
-      font-size: 0.9rem;
-      font-weight: 600;
-      font-family: var(--font-family);
-      border: none;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      transition: background var(--transition-fast),
-        transform var(--transition-fast),
-        box-shadow var(--transition-fast);
-    }
-
-    .btn:active {
-      transform: scale(0.97);
-    }
-
-    .btn-primary {
-      background: var(--color-primary);
-      color: #fff;
-      width: 100%;
-    }
-
-    .btn-primary:hover {
-      background: var(--color-primary-hover);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .btn-danger {
-      background: transparent;
-      color: var(--color-danger);
-      padding: 0.3rem 0.6rem;
-      font-size: 0.8rem;
-      border: 1px solid var(--color-danger);
-      border-radius: var(--radius-sm);
-    }
-
-    .btn-danger:hover {
-      background: var(--color-danger);
-      color: #fff;
-    }
-
-    /* ── Summary Cards ───────────────────────────────────────── */
-    .summary-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .metric-card {
-      background: var(--color-card);
-      border-radius: var(--radius-md);
-      padding: 1.15rem 1.25rem;
-      box-shadow: var(--shadow-sm);
-      border: 1px solid var(--color-border);
-      transition: box-shadow var(--transition-normal),
-        transform var(--transition-normal);
-    }
-
-    .metric-card:hover {
-      box-shadow: var(--shadow-md);
-      transform: translateY(-2px);
-    }
-
-    .metric-label {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--color-text-secondary);
-      margin-bottom: 0.35rem;
-    }
-
-    .metric-value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-
-    .metric-value.burn {
-      color: var(--color-danger);
-    }
-
-    .metric-value.positive {
-      color: var(--color-success);
-    }
-
-    .metric-value.neutral {
-      color: var(--color-primary);
-    }
-
-    .metric-sub {
-      font-size: 0.78rem;
-      color: var(--color-text-secondary);
-      margin-top: 0.2rem;
-    }
-
-    /* ── Runway Input ────────────────────────────────────────── */
-    .runway-input-row {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-
-    .runway-input-row label {
-      font-weight: 600;
-      font-size: 0.9rem;
-      white-space: nowrap;
-    }
-
-    .runway-input-row .form-input {
-      max-width: 220px;
-    }
-
-    /* ── Charts ──────────────────────────────────────────────── */
-    .charts-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-
-    @media (max-width: 768px) {
-      .charts-row {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .chart-wrapper {
-      position: relative;
-      width: 100%;
-      padding: 0.5rem;
-    }
-
-    .chart-wrapper canvas {
-      max-height: 320px;
-    }
-
-    /* ── Data Table ──────────────────────────────────────────── */
-    .table-wrapper {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.88rem;
-    }
-
-    thead th {
-      background: var(--color-bg);
-      padding: 0.7rem 0.9rem;
-      text-align: left;
-      font-weight: 600;
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--color-text-secondary);
-      border-bottom: 2px solid var(--color-border);
-      white-space: nowrap;
-    }
-
-    tbody td {
-      padding: 0.7rem 0.9rem;
-      border-bottom: 1px solid var(--color-border);
-      white-space: nowrap;
-    }
-
-    tbody tr:hover {
-      background: var(--color-primary-light);
-    }
-
-    tbody tr:last-child td {
-      border-bottom: none;
-    }
-
-    .text-right {
-      text-align: right;
-    }
-
-    .text-center {
-      text-align: center;
-    }
-
-    .text-danger {
-      color: var(--color-danger);
-      font-weight: 600;
-    }
-
-    .text-success {
-      color: var(--color-success);
-      font-weight: 600;
-    }
-
-    /* ── Empty state ─────────────────────────────────────────── */
-    .empty-state {
-      text-align: center;
-      padding: 2.5rem 1rem;
-      color: var(--color-text-secondary);
-    }
-
-    .empty-state .icon {
-      font-size: 2.5rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .empty-state p {
-      font-size: 0.95rem;
-    }
-
-    /* ── Toast Notification ──────────────────────────────────── */
-    .toast-container {
-      position: fixed;
-      bottom: 1.5rem;
-      right: 1.5rem;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .toast {
-      padding: 0.75rem 1.25rem;
-      border-radius: var(--radius-sm);
-      color: #fff;
-      font-size: 0.88rem;
-      font-weight: 500;
-      box-shadow: var(--shadow-lg);
-      animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
-      max-width: 360px;
-    }
-
-    .toast.success {
-      background: var(--color-success);
-    }
-
-    .toast.error {
-      background: var(--color-danger);
-    }
-
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to   { transform: translateX(0);    opacity: 1; }
-    }
-
-    @keyframes fadeOut {
-      from { opacity: 1; }
-      to   { opacity: 0; }
-    }
-
-    /* ── Loading spinner ─────────────────────────────────────── */
-    .spinner {
-      display: inline-block;
-      width: 1rem;
-      height: 1rem;
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.6s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* ── Currency prefix ─────────────────────────────────────── */
-    .currency-wrap {
-      position: relative;
-    }
-
-    .currency-wrap .currency-sign {
-      position: absolute;
-      left: 0.7rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--color-text-secondary);
-      font-size: 0.88rem;
-      pointer-events: none;
-    }
-
-    .currency-wrap .form-input {
-      padding-left: 1.5rem;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monthly Cash Burn Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --primary: #1a73e8;
+    --primary-light: #e8f0fe;
+    --danger: #e53935;
+    --danger-light: #fdecea;
+    --success: #43a047;
+    --success-light: #e8f5e9;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --text: #333333;
+    --text-secondary: #6b7280;
+    --subtotal-bg: #f0f4f8;
+    --section-header-bg: #e8edf2;
+    --border: #e0e4ea;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --radius: 8px;
+    --radius-sm: 4px;
+    --transition: 0.2s ease;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Header ─────────────────────────────────────────── */
+
+  .header {
+    background: linear-gradient(135deg, var(--primary), #1557b0);
+    color: #fff;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin-bottom: 0.25rem;
+  }
+
+  .header p {
+    font-size: 0.95rem;
+    opacity: 0.85;
+  }
+
+  /* ── Layout ─────────────────────────────────────────── */
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+  }
+
+  .card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .card-title .icon {
+    font-size: 1.1rem;
+  }
+
+  .row {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .row-2 { grid-template-columns: 1fr 1fr; }
+  .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  @media (max-width: 900px) {
+    .row-2, .row-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Upload Section ─────────────────────────────────── */
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color var(--transition), background var(--transition);
+    position: relative;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: var(--primary);
+    background: var(--primary-light);
+  }
+
+  .drop-zone .drop-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    display: block;
+  }
+
+  .drop-zone p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .drop-zone p strong {
+    color: var(--primary);
+  }
+
+  .drop-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .upload-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .file-name {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── Buttons ────────────────────────────────────────── */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.55rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition), opacity var(--transition);
+    white-space: nowrap;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: #1557b0;
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+
+  .btn-outline:hover:not(:disabled) {
+    background: var(--primary-light);
+  }
+
+  .btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  /* ── Messages ───────────────────────────────────────── */
+
+  .msg {
+    padding: 0.6rem 0.9rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    margin-top: 0.75rem;
+    display: none;
+  }
+
+  .msg.show { display: block; }
+
+  .msg-success {
+    background: var(--success-light);
+    color: var(--success);
+    border: 1px solid #c8e6c9;
+  }
+
+  .msg-error {
+    background: var(--danger-light);
+    color: var(--danger);
+    border: 1px solid #f5c6cb;
+  }
+
+  /* ── Period Selector ────────────────────────────────── */
+
+  .selector-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .field label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+
+  .field select,
+  .field input {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    background: #fff;
+    color: var(--text);
+    min-width: 110px;
+  }
+
+  .field select:focus,
+  .field input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+  }
+
+  /* ── Tags / Chips ───────────────────────────────────── */
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.85rem;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--primary-light);
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  .chip .chip-x {
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity var(--transition);
+    background: none;
+    border: none;
+    color: inherit;
+    padding: 0;
+  }
+
+  .chip .chip-x:hover {
+    opacity: 1;
+  }
+
+  .chips-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-top: 0.85rem;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+  }
+
+  /* ── Metric Cards ───────────────────────────────────── */
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+  }
+
+  .metric-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .metric-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .metric-value.negative { color: var(--danger); }
+  .metric-value.positive { color: var(--success); }
+  .metric-value.neutral  { color: var(--primary); }
+
+  .metric-sub {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+
+  .metric-card .runway-input {
+    margin-top: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+  }
+
+  .metric-card .runway-input input {
+    width: 120px;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+  }
+
+  .metric-card .runway-input input:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+
+  /* ── Quarterly Table ────────────────────────────────── */
+
+  .table-note {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 0.75rem;
+  }
+
+  .scf-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    min-width: 640px;
+  }
+
+  .scf-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    text-align: right;
+    padding: 0.65rem 0.85rem;
+    white-space: nowrap;
+  }
+
+  .scf-table thead th:first-child {
+    text-align: left;
+    min-width: 300px;
+  }
+
+  .scf-table tbody td {
+    padding: 0.45rem 0.85rem;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scf-table tbody td:first-child {
+    text-align: left;
+    white-space: normal;
+  }
+
+  /* Row types. */
+  .scf-table .row-section-header td {
+    background: var(--section-header-bg);
+    font-weight: 700;
+    padding-top: 0.7rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .scf-table .row-subsection td {
+    font-style: italic;
+    color: var(--text-secondary);
+    padding-top: 0.55rem;
+  }
+
+  .scf-table .row-subtotal td {
+    background: var(--subtotal-bg);
+    font-weight: 700;
+    border-top: 1px solid #cfd8e3;
+    border-bottom: 2px solid #cfd8e3;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .scf-table .row-grand-total td {
+    background: var(--section-header-bg);
+    font-weight: 700;
+    border-top: 2px double #aab4c2;
+    border-bottom: 2px double #aab4c2;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    font-size: 0.88rem;
+  }
+
+  .scf-table .row-line td:first-child {
+    padding-left: 1.75rem;
+  }
+
+  .scf-table .row-subline td:first-child {
+    padding-left: 2.75rem;
+  }
+
+  .scf-table .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+  }
+
+  .scf-table .empty-state td {
+    text-align: center;
+  }
+
+  .val-neg { color: var(--danger); }
+
+  /* ── Chart ──────────────────────────────────────────── */
+
+  .chart-wrap {
+    position: relative;
+    height: 320px;
+  }
+
+  /* ── Spinner ────────────────────────────────────────── */
+
+  .spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+  }
+
+  .spinner-dark {
+    border-color: rgba(0, 0, 0, 0.12);
+    border-top-color: var(--primary);
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ── Empty / placeholder ────────────────────────────── */
+
+  .empty-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+    text-align: center;
+    gap: 0.5rem;
+  }
+
+  .empty-placeholder .empty-icon {
+    font-size: 2.5rem;
+    opacity: 0.5;
+  }
+
+  /* ── Responsive tweaks ──────────────────────────────── */
+
+  @media (max-width: 640px) {
+    .container { padding: 1rem; }
+    .card { padding: 1rem; }
+    .header { padding: 1.5rem 1rem; }
+    .header h1 { font-size: 1.35rem; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    .selector-row { flex-direction: column; align-items: stretch; }
+    .selector-row .field { width: 100%; }
+    .selector-row .field select { width: 100%; }
+  }
+</style>
 </head>
 <body>
-  <!-- ═══ Header ═══ -->
-  <header class="header">
-    <div class="header-inner">
-      <div>
-        <h1>📊 Monthly Cash Burn Tracker</h1>
-        <span class="header-subtitle">Track expenses, monitor burn rate, and plan your runway</span>
+
+<!-- ━━ Header ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+<div class="header">
+  <h1>Monthly Cash Burn Dashboard</h1>
+  <p>Import NetSuite Statement of Cash Flows</p>
+</div>
+
+<div class="container">
+
+  <!-- ━━ Upload + Period Selector Row ━━━━━━━━━━━━━━━━━━ -->
+  <div class="row row-2">
+
+    <!-- Upload ──────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📤</span> Upload SCF Export</div>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        <span class="drop-icon">📊</span>
+        <p>Drag &amp; drop an <strong>.xlsx</strong> file here, or click to browse</p>
       </div>
+      <div class="upload-actions">
+        <span class="file-name" id="fileName">No file selected</span>
+        <button class="btn btn-primary" id="uploadBtn" disabled>Upload</button>
+      </div>
+      <div class="msg msg-success" id="uploadSuccess"></div>
+      <div class="msg msg-error" id="uploadError"></div>
     </div>
-  </header>
 
-  <div class="container">
-    <div class="dashboard-grid">
-      <!-- ═══ Left Column — Entry Form ═══ -->
-      <div>
-        <div class="card">
-          <div class="card-header"><span class="icon">➕</span> Add Monthly Entry</div>
-          <div class="card-body">
-            <form id="entryForm" autocomplete="off">
-              <!-- Period -->
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label" for="month">Month</label>
-                  <select class="form-select" id="month" required>
-                    <option value="1">January</option>
-                    <option value="2">February</option>
-                    <option value="3">March</option>
-                    <option value="4">April</option>
-                    <option value="5">May</option>
-                    <option value="6">June</option>
-                    <option value="7">July</option>
-                    <option value="8">August</option>
-                    <option value="9">September</option>
-                    <option value="10">October</option>
-                    <option value="11">November</option>
-                    <option value="12">December</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="year">Year</label>
-                  <input class="form-input" type="number" id="year" min="2000" max="2100" required>
-                </div>
-              </div>
-
-              <!-- Revenue -->
-              <div class="form-section-title">Revenue</div>
-              <div class="form-group">
-                <label class="form-label" for="revenue">Monthly Revenue</label>
-                <div class="currency-wrap">
-                  <span class="currency-sign">$</span>
-                  <input class="form-input" type="number" id="revenue" min="0" step="0.01" value="0" required>
-                </div>
-              </div>
-
-              <!-- Expenses -->
-              <div class="form-section-title">Expenses</div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label" for="payroll">Payroll</label>
-                  <div class="currency-wrap">
-                    <span class="currency-sign">$</span>
-                    <input class="form-input" type="number" id="payroll" min="0" step="0.01" value="0" required>
-                  </div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="rent">Rent</label>
-                  <div class="currency-wrap">
-                    <span class="currency-sign">$</span>
-                    <input class="form-input" type="number" id="rent" min="0" step="0.01" value="0" required>
-                  </div>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label" for="marketing">Marketing</label>
-                  <div class="currency-wrap">
-                    <span class="currency-sign">$</span>
-                    <input class="form-input" type="number" id="marketing" min="0" step="0.01" value="0" required>
-                  </div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="software">Software / Tools</label>
-                  <div class="currency-wrap">
-                    <span class="currency-sign">$</span>
-                    <input class="form-input" type="number" id="software" min="0" step="0.01" value="0" required>
-                  </div>
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label" for="professional">Prof. Services</label>
-                  <div class="currency-wrap">
-                    <span class="currency-sign">$</span>
-                    <input class="form-input" type="number" id="professional" min="0" step="0.01" value="0" required>
-                  </div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="other">Other</label>
-                  <div class="currency-wrap">
-                    <span class="currency-sign">$</span>
-                    <input class="form-input" type="number" id="other" min="0" step="0.01" value="0" required>
-                  </div>
-                </div>
-              </div>
-
-              <button class="btn btn-primary" type="submit" id="submitBtn" style="margin-top: 1rem;">
-                Add Entry
-              </button>
-            </form>
-          </div>
+    <!-- Period Selector ─────────────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📅</span> Period Selector</div>
+      <div class="selector-row">
+        <div class="field">
+          <label for="selYear">Year</label>
+          <select id="selYear"></select>
         </div>
+        <div class="field">
+          <label for="selQuarter">Quarter</label>
+          <select id="selQuarter">
+            <option value="1">Q1 (Jan – Mar)</option>
+            <option value="2">Q2 (Apr – Jun)</option>
+            <option value="3">Q3 (Jul – Sep)</option>
+            <option value="4">Q4 (Oct – Dec)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="loadQtrBtn">Load Quarter</button>
       </div>
-
-      <!-- ═══ Right Column — Dashboard ═══ -->
-      <div>
-        <!-- Runway input + Summary cards -->
-        <div class="runway-input-row">
-          <label for="cashOnHand">💰 Cash on Hand:</label>
-          <div class="currency-wrap">
-            <span class="currency-sign">$</span>
-            <input class="form-input" type="number" id="cashOnHand" min="0" step="0.01"
-                   value="0" placeholder="e.g. 500000">
-          </div>
-        </div>
-
-        <div class="summary-grid" id="summaryGrid">
-          <div class="metric-card">
-            <div class="metric-label">Avg Monthly Burn</div>
-            <div class="metric-value burn" id="metricAvgBurn">$0</div>
-            <div class="metric-sub">Net cash spent per month</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Total Cash Burned</div>
-            <div class="metric-value burn" id="metricTotalBurn">$0</div>
-            <div class="metric-sub">Cumulative net spend</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Months Tracked</div>
-            <div class="metric-value neutral" id="metricMonths">0</div>
-            <div class="metric-sub">Data entries recorded</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Est. Runway</div>
-            <div class="metric-value positive" id="metricRunway">∞</div>
-            <div class="metric-sub">Months until cash runs out</div>
-          </div>
-        </div>
-
-        <!-- Charts -->
-        <div class="charts-row">
-          <div class="card">
-            <div class="card-header"><span class="icon">📈</span> Cash Burn Over Time</div>
-            <div class="card-body">
-              <div class="chart-wrapper">
-                <canvas id="burnChart"></canvas>
-              </div>
-              <div class="empty-state" id="burnChartEmpty">
-                <div class="icon">📉</div>
-                <p>Add entries to see your burn chart</p>
-              </div>
-            </div>
-          </div>
-          <div class="card">
-            <div class="card-header"><span class="icon">🍩</span> Expense Breakdown</div>
-            <div class="card-body">
-              <div class="chart-wrapper">
-                <canvas id="expenseChart"></canvas>
-              </div>
-              <div class="empty-state" id="expenseChartEmpty">
-                <div class="icon">📊</div>
-                <p>Add entries to see expense breakdown</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Data Table -->
-        <div class="card">
-          <div class="card-header"><span class="icon">📋</span> All Entries</div>
-          <div class="card-body" style="padding: 0;">
-            <div class="table-wrapper">
-              <table id="entriesTable">
-                <thead>
-                  <tr>
-                    <th>Period</th>
-                    <th class="text-right">Revenue</th>
-                    <th class="text-right">Payroll</th>
-                    <th class="text-right">Rent</th>
-                    <th class="text-right">Marketing</th>
-                    <th class="text-right">Software</th>
-                    <th class="text-right">Prof. Svc</th>
-                    <th class="text-right">Other</th>
-                    <th class="text-right">Total Exp.</th>
-                    <th class="text-right">Cash Burn</th>
-                    <th class="text-center">Action</th>
-                  </tr>
-                </thead>
-                <tbody id="entriesBody"></tbody>
-              </table>
-            </div>
-            <div class="empty-state" id="tableEmpty">
-              <div class="icon">📭</div>
-              <p>No entries yet — add your first month above</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div class="chips-label" id="chipsLabel" style="display:none;">Uploaded periods:</div>
+      <div class="chips" id="periodChips"></div>
     </div>
   </div>
 
-  <!-- Toast container -->
-  <div class="toast-container" id="toastContainer"></div>
+  <!-- ━━ Burn Analysis Metrics ━━━━━━━━━━━━━━━━━━━━━━━━ -->
+  <div class="metrics-grid" id="metricsGrid">
+    <div class="metric-card">
+      <span class="metric-label">Monthly Cash Burn</span>
+      <span class="metric-value neutral" id="metricBurn">—</span>
+      <span class="metric-sub">avg net cash change</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Operating Burn</span>
+      <span class="metric-value negative" id="metricOpBurn">—</span>
+      <span class="metric-sub">avg net cash used in operations</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Cash Position</span>
+      <span class="metric-value positive" id="metricCash">—</span>
+      <span class="metric-sub">latest end-of-period balance</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Estimated Runway</span>
+      <span class="metric-value neutral" id="metricRunway">—</span>
+      <div class="runway-input">
+        <label for="cashOnHandInput">Cash on hand ($):</label>
+        <input type="text" id="cashOnHandInput" placeholder="e.g. 11,929,070">
+      </div>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Months of Data</span>
+      <span class="metric-value neutral" id="metricMonths">0</span>
+      <span class="metric-sub">uploaded periods</span>
+    </div>
+  </div>
 
-  <script>
-    /* ── Constants & State ──────────────────────────────────── */
-    const MONTH_NAMES = [
-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-
-    const EXPENSE_CATEGORIES = [
-      { key: 'payroll',      label: 'Payroll',        color: '#1a73e8' },
-      { key: 'rent',         label: 'Rent',           color: '#fb8c00' },
-      { key: 'marketing',    label: 'Marketing',      color: '#8e24aa' },
-      { key: 'software',     label: 'Software/Tools', color: '#00acc1' },
-      { key: 'professional', label: 'Prof. Services', color: '#43a047' },
-      { key: 'other',        label: 'Other',          color: '#78909c' },
-    ];
-
-    let entries = [];
-    let burnChart = null;
-    let expenseChart = null;
-
-    /* ── Helpers ────────────────────────────────────────────── */
-    function formatCurrency(value) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(value);
-    }
-
-    function formatCurrencyDecimals(value) {
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(value);
-    }
-
-    function showToast(message, type = 'success') {
-      const container = document.getElementById('toastContainer');
-      const toast = document.createElement('div');
-      toast.className = `toast ${type}`;
-      toast.textContent = message;
-      container.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
-    }
-
-    function totalExpenses(entry) {
-      return (
-        (entry.payroll || 0) +
-        (entry.rent || 0) +
-        (entry.marketing || 0) +
-        (entry.software || 0) +
-        (entry.professional || 0) +
-        (entry.other || 0)
-      );
-    }
-
-    function cashBurn(entry) {
-      return totalExpenses(entry) - (entry.revenue || 0);
-    }
-
-    function sortedEntries() {
-      return [...entries].sort((a, b) => {
-        if (a.year !== b.year) return a.year - b.year;
-        return a.month - b.month;
-      });
-    }
-
-    /* ── API Layer ──────────────────────────────────────────── */
-    async function fetchEntries() {
-      try {
-        const res = await fetch('/api/entries');
-        if (!res.ok) throw new Error('Failed to fetch entries');
-        entries = await res.json();
-        if (!Array.isArray(entries)) entries = [];
-      } catch (err) {
-        console.error(err);
-        entries = [];
-      }
-    }
-
-    async function submitEntry(data) {
-      const res = await fetch('/api/entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Failed to create entry');
-      }
-      return res.json();
-    }
-
-    async function deleteEntry(id) {
-      const res = await fetch(`/api/entries/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete entry');
-    }
-
-    async function fetchSummary(cashOnHand) {
-      try {
-        const res = await fetch(`/api/summary?cash_on_hand=${cashOnHand}`);
-        if (!res.ok) throw new Error('Failed to fetch summary');
-        return await res.json();
-      } catch {
-        return null;
-      }
-    }
-
-    /* ── Render: Summary Cards ─────────────────────────────── */
-    async function renderSummary() {
-      const cashOnHand = parseFloat(document.getElementById('cashOnHand').value) || 0;
-      const summary = await fetchSummary(cashOnHand);
-
-      if (summary) {
-        document.getElementById('metricAvgBurn').textContent =
-          formatCurrency(summary.average_burn || 0);
-        document.getElementById('metricTotalBurn').textContent =
-          formatCurrency(summary.total_burn || 0);
-        document.getElementById('metricMonths').textContent =
-          summary.months_tracked || 0;
-
-        const runway = summary.runway_months;
-        const runwayEl = document.getElementById('metricRunway');
-        if (runway === null || runway === undefined || runway < 0 || !isFinite(runway)) {
-          runwayEl.textContent = '∞';
-          runwayEl.className = 'metric-value positive';
-        } else {
-          runwayEl.textContent = `${runway.toFixed(1)} mo`;
-          runwayEl.className = runway > 12
-            ? 'metric-value positive'
-            : runway > 6
-              ? 'metric-value neutral'
-              : 'metric-value burn';
-        }
-      } else {
-        // Compute locally as fallback.
-        const sorted = sortedEntries();
-        const burns = sorted.map(cashBurn);
-        const totalBurn = burns.reduce((s, v) => s + v, 0);
-        const avgBurn = burns.length ? totalBurn / burns.length : 0;
-
-        document.getElementById('metricAvgBurn').textContent = formatCurrency(avgBurn);
-        document.getElementById('metricTotalBurn').textContent = formatCurrency(totalBurn);
-        document.getElementById('metricMonths').textContent = sorted.length;
-
-        const runwayEl = document.getElementById('metricRunway');
-        if (avgBurn <= 0 || cashOnHand <= 0) {
-          runwayEl.textContent = avgBurn <= 0 && sorted.length > 0 ? '∞' : '∞';
-          runwayEl.className = 'metric-value positive';
-        } else {
-          const months = cashOnHand / avgBurn;
-          runwayEl.textContent = `${months.toFixed(1)} mo`;
-          runwayEl.className = months > 12
-            ? 'metric-value positive'
-            : months > 6
-              ? 'metric-value neutral'
-              : 'metric-value burn';
-        }
-      }
-    }
-
-    /* ── Render: Burn Chart ────────────────────────────────── */
-    function renderBurnChart() {
-      const sorted = sortedEntries();
-      const canvas = document.getElementById('burnChart');
-      const emptyEl = document.getElementById('burnChartEmpty');
-
-      if (!sorted.length) {
-        canvas.style.display = 'none';
-        emptyEl.style.display = '';
-        if (burnChart) { burnChart.destroy(); burnChart = null; }
-        return;
-      }
-
-      canvas.style.display = '';
-      emptyEl.style.display = 'none';
-
-      const labels = sorted.map(e => `${MONTH_NAMES[e.month]} ${e.year}`);
-      const revenueData = sorted.map(e => e.revenue || 0);
-      const expenseData = sorted.map(e => totalExpenses(e));
-      const burnData = sorted.map(e => cashBurn(e));
-
-      const data = {
-        labels,
-        datasets: [
-          {
-            type: 'bar',
-            label: 'Revenue',
-            data: revenueData,
-            backgroundColor: 'rgba(67, 160, 71, 0.7)',
-            borderColor: '#43a047',
-            borderWidth: 1,
-            borderRadius: 3,
-            order: 2,
-          },
-          {
-            type: 'bar',
-            label: 'Total Expenses',
-            data: expenseData,
-            backgroundColor: 'rgba(229, 57, 53, 0.7)',
-            borderColor: '#e53935',
-            borderWidth: 1,
-            borderRadius: 3,
-            order: 2,
-          },
-          {
-            type: 'line',
-            label: 'Net Cash Burn',
-            data: burnData,
-            borderColor: '#1a73e8',
-            backgroundColor: 'rgba(26, 115, 232, 0.1)',
-            pointBackgroundColor: '#1a73e8',
-            pointRadius: 5,
-            pointHoverRadius: 7,
-            borderWidth: 2.5,
-            tension: 0.3,
-            fill: true,
-            order: 1,
-          },
-        ],
-      };
-
-      if (burnChart) burnChart.destroy();
-
-      burnChart = new Chart(canvas, {
-        type: 'bar',
-        data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true } },
-            tooltip: {
-              callbacks: {
-                label: ctx => `${ctx.dataset.label}: ${formatCurrencyDecimals(ctx.parsed.y)}`,
-              },
-            },
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: { callback: v => formatCurrency(v) },
-              grid: { color: 'rgba(0,0,0,0.05)' },
-            },
-            x: {
-              grid: { display: false },
-            },
-          },
-        },
-      });
-    }
-
-    /* ── Render: Expense Breakdown Doughnut ────────────────── */
-    function renderExpenseChart() {
-      const canvas = document.getElementById('expenseChart');
-      const emptyEl = document.getElementById('expenseChartEmpty');
-
-      if (!entries.length) {
-        canvas.style.display = 'none';
-        emptyEl.style.display = '';
-        if (expenseChart) { expenseChart.destroy(); expenseChart = null; }
-        return;
-      }
-
-      // Aggregate categories across all entries.
-      const totals = EXPENSE_CATEGORIES.map(cat =>
-        entries.reduce((sum, e) => sum + (e[cat.key] || 0), 0)
-      );
-
-      // Hide chart if all zeros.
-      if (totals.every(v => v === 0)) {
-        canvas.style.display = 'none';
-        emptyEl.style.display = '';
-        if (expenseChart) { expenseChart.destroy(); expenseChart = null; }
-        return;
-      }
-
-      canvas.style.display = '';
-      emptyEl.style.display = 'none';
-
-      const data = {
-        labels: EXPENSE_CATEGORIES.map(c => c.label),
-        datasets: [{
-          data: totals,
-          backgroundColor: EXPENSE_CATEGORIES.map(c => c.color),
-          hoverOffset: 6,
-          borderWidth: 2,
-          borderColor: '#fff',
-        }],
-      };
-
-      if (expenseChart) expenseChart.destroy();
-
-      expenseChart = new Chart(canvas, {
-        type: 'doughnut',
-        data,
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          cutout: '55%',
-          plugins: {
-            legend: { position: 'bottom', labels: { padding: 14, usePointStyle: true } },
-            tooltip: {
-              callbacks: {
-                label: ctx => {
-                  const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                  const pct = total ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
-                  return `${ctx.label}: ${formatCurrencyDecimals(ctx.parsed)} (${pct}%)`;
-                },
-              },
-            },
-          },
-        },
-      });
-    }
-
-    /* ── Render: Data Table ────────────────────────────────── */
-    function renderTable() {
-      const tbody = document.getElementById('entriesBody');
-      const emptyEl = document.getElementById('tableEmpty');
-      const table = document.getElementById('entriesTable');
-      const sorted = sortedEntries();
-
-      if (!sorted.length) {
-        table.style.display = 'none';
-        emptyEl.style.display = '';
-        return;
-      }
-
-      table.style.display = '';
-      emptyEl.style.display = 'none';
-
-      tbody.innerHTML = sorted.map(e => {
-        const total = totalExpenses(e);
-        const burn = cashBurn(e);
-        const burnClass = burn > 0 ? 'text-danger' : burn < 0 ? 'text-success' : '';
-        return `
-          <tr>
-            <td>${MONTH_NAMES[e.month]} ${e.year}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.revenue || 0)}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.payroll || 0)}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.rent || 0)}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.marketing || 0)}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.software || 0)}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.professional || 0)}</td>
-            <td class="text-right">${formatCurrencyDecimals(e.other || 0)}</td>
-            <td class="text-right" style="font-weight:600;">${formatCurrencyDecimals(total)}</td>
-            <td class="text-right ${burnClass}">${formatCurrencyDecimals(burn)}</td>
-            <td class="text-center">
-              <button class="btn btn-danger" onclick="handleDelete('${e.id}')">Delete</button>
+  <!-- ━━ Quarterly Cash Flow Table ━━━━━━━━━━━━━━━━━━━━ -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📋</span> Quarterly Statement of Cash Flows</div>
+    <div class="table-note">Amounts in thousands</div>
+    <div class="scf-wrap">
+      <table class="scf-table" id="scfTable">
+        <thead>
+          <tr id="scfHead">
+            <th>Description</th>
+            <th>Month 1</th>
+            <th>Month 2</th>
+            <th>Month 3</th>
+            <th>Quarter Total</th>
+          </tr>
+        </thead>
+        <tbody id="scfBody">
+          <tr class="empty-state">
+            <td colspan="5">
+              <div class="empty-placeholder">
+                <span class="empty-icon">📭</span>
+                <strong>No data loaded</strong>
+                <span>Upload SCF files and select a quarter to view cash flow data.</span>
+              </div>
             </td>
-          </tr>`;
-      }).join('');
-    }
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-    /* ── Full Refresh ──────────────────────────────────────── */
-    async function refreshAll() {
-      await fetchEntries();
-      renderBurnChart();
-      renderExpenseChart();
-      renderTable();
-      await renderSummary();
-    }
+  <!-- ━━ Burn Trend Chart ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+  <div class="card">
+    <div class="card-title"><span class="icon">📈</span> Burn Trend</div>
+    <div class="chart-wrap">
+      <canvas id="burnChart"></canvas>
+    </div>
+  </div>
+</div>
 
-    /* ── Event Handlers ────────────────────────────────────── */
-    async function handleSubmit(e) {
-      e.preventDefault();
-      const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Saving…';
+<script>
+/* ═══════════════════════════════════════════════════════
+   Utility helpers
+   ═══════════════════════════════════════════════════════ */
 
-      const data = {
-        month: parseInt(document.getElementById('month').value, 10),
-        year: parseInt(document.getElementById('year').value, 10),
-        revenue: parseFloat(document.getElementById('revenue').value) || 0,
-        payroll: parseFloat(document.getElementById('payroll').value) || 0,
-        rent: parseFloat(document.getElementById('rent').value) || 0,
-        marketing: parseFloat(document.getElementById('marketing').value) || 0,
-        software: parseFloat(document.getElementById('software').value) || 0,
-        professional: parseFloat(document.getElementById('professional').value) || 0,
-        other: parseFloat(document.getElementById('other').value) || 0,
-      };
+/**
+ * Format a number in accounting style: commas for thousands and
+ * parentheses around negative values. Values are displayed in
+ * thousands (divided by 1000).
+ */
+function fmtAccounting(val, inThousands) {
+  if (val == null || val === '' || typeof val === 'undefined') return '—';
+  let n = Number(val);
+  if (isNaN(n)) return '—';
+  if (inThousands) n = Math.round(n / 1000);
+  const neg = n < 0;
+  const abs = Math.abs(n);
+  const formatted = abs.toLocaleString('en-US');
+  return neg ? `(${formatted})` : formatted;
+}
 
-      try {
-        await submitEntry(data);
-        showToast(`Entry for ${MONTH_NAMES[data.month]} ${data.year} added!`);
-        // Reset expense and revenue fields but keep month/year for quick
-        // sequential entry.
-        document.getElementById('revenue').value = '0';
-        document.getElementById('payroll').value = '0';
-        document.getElementById('rent').value = '0';
-        document.getElementById('marketing').value = '0';
-        document.getElementById('software').value = '0';
-        document.getElementById('professional').value = '0';
-        document.getElementById('other').value = '0';
-        await refreshAll();
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Add Entry';
+/**
+ * Format a raw number for the metric cards — shows full dollar
+ * amount with commas and parentheses for negatives.
+ */
+function fmtMetric(val) {
+  if (val == null || val === '') return '—';
+  const n = Number(val);
+  if (isNaN(n)) return '—';
+  const neg = n < 0;
+  const abs = Math.abs(Math.round(n));
+  const formatted = abs.toLocaleString('en-US');
+  return neg ? `($${formatted})` : `$${formatted}`;
+}
+
+/** Month names for column headers. */
+const MONTHS = [
+  'Jan','Feb','Mar','Apr','May','Jun',
+  'Jul','Aug','Sep','Oct','Nov','Dec'
+];
+
+/** Quarter to month indices (0-based). */
+function quarterMonths(q) {
+  const start = (q - 1) * 3;
+  return [start, start + 1, start + 2];
+}
+
+/** Short month label: "Dec 2025". */
+function monthLabel(year, monthIdx) {
+  return `${MONTHS[monthIdx]} ${year}`;
+}
+
+/** Parse a comma-formatted number string to a plain number. */
+function parseFormattedNumber(str) {
+  if (!str) return NaN;
+  const cleaned = str.replace(/[$,\s]/g, '');
+  return Number(cleaned);
+}
+
+/* ═══════════════════════════════════════════════════════
+   State
+   ═══════════════════════════════════════════════════════ */
+
+let allPeriods = [];        // [{id, year, month, label}, …]
+let quarterlyData = null;   // response from /api/quarterly
+let burnChart = null;       // Chart.js instance
+
+/* ═══════════════════════════════════════════════════════
+   DOM references
+   ═══════════════════════════════════════════════════════ */
+
+const $dropZone      = document.getElementById('dropZone');
+const $fileInput     = document.getElementById('fileInput');
+const $fileName      = document.getElementById('fileName');
+const $uploadBtn     = document.getElementById('uploadBtn');
+const $uploadSuccess = document.getElementById('uploadSuccess');
+const $uploadError   = document.getElementById('uploadError');
+
+const $selYear       = document.getElementById('selYear');
+const $selQuarter    = document.getElementById('selQuarter');
+const $loadQtrBtn    = document.getElementById('loadQtrBtn');
+const $chipsLabel    = document.getElementById('chipsLabel');
+const $periodChips   = document.getElementById('periodChips');
+
+const $scfHead       = document.getElementById('scfHead');
+const $scfBody       = document.getElementById('scfBody');
+
+const $metricBurn    = document.getElementById('metricBurn');
+const $metricOpBurn  = document.getElementById('metricOpBurn');
+const $metricCash    = document.getElementById('metricCash');
+const $metricRunway  = document.getElementById('metricRunway');
+const $metricMonths  = document.getElementById('metricMonths');
+const $cashOnHand    = document.getElementById('cashOnHandInput');
+
+/* ═══════════════════════════════════════════════════════
+   Initialise period selector defaults
+   ═══════════════════════════════════════════════════════ */
+
+(function initSelectors() {
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  for (let y = thisYear - 3; y <= thisYear + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    if (y === thisYear) opt.selected = true;
+    $selYear.appendChild(opt);
+  }
+  const currentQ = Math.ceil((now.getMonth() + 1) / 3);
+  $selQuarter.value = currentQ;
+})();
+
+/* ═══════════════════════════════════════════════════════
+   File upload logic
+   ═══════════════════════════════════════════════════════ */
+
+let selectedFile = null;
+
+function clearMessages() {
+  $uploadSuccess.classList.remove('show');
+  $uploadError.classList.remove('show');
+}
+
+$dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  $dropZone.classList.add('drag-over');
+});
+
+$dropZone.addEventListener('dragleave', () => {
+  $dropZone.classList.remove('drag-over');
+});
+
+$dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  $dropZone.classList.remove('drag-over');
+  const files = e.dataTransfer.files;
+  if (files.length > 0) handleFileSelect(files[0]);
+});
+
+$fileInput.addEventListener('change', () => {
+  if ($fileInput.files.length > 0) handleFileSelect($fileInput.files[0]);
+});
+
+function handleFileSelect(file) {
+  clearMessages();
+  if (!file.name.match(/\.xlsx?$/i)) {
+    $uploadError.textContent = 'Please select an .xlsx file.';
+    $uploadError.classList.add('show');
+    selectedFile = null;
+    $uploadBtn.disabled = true;
+    $fileName.textContent = 'No file selected';
+    return;
+  }
+  selectedFile = file;
+  $fileName.textContent = file.name;
+  $uploadBtn.disabled = false;
+}
+
+$uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  clearMessages();
+  $uploadBtn.disabled = true;
+  $uploadBtn.innerHTML = '<span class="spinner"></span> Uploading…';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Upload failed (${res.status})`);
+
+    const periodLabel = data.month && data.year
+      ? `${MONTHS[data.month - 1]} ${data.year}`
+      : 'period';
+    $uploadSuccess.textContent = `✓ Successfully uploaded: ${periodLabel}`;
+    $uploadSuccess.classList.add('show');
+
+    // Reset file input state.
+    selectedFile = null;
+    $fileInput.value = '';
+    $fileName.textContent = 'No file selected';
+
+    // Refresh periods and metrics.
+    await loadPeriods();
+    refreshBurnMetrics();
+  } catch (err) {
+    $uploadError.textContent = `✗ ${err.message}`;
+    $uploadError.classList.add('show');
+  } finally {
+    $uploadBtn.disabled = !selectedFile;
+    $uploadBtn.textContent = 'Upload';
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   Periods management
+   ═══════════════════════════════════════════════════════ */
+
+async function loadPeriods() {
+  try {
+    const res = await fetch('/api/periods');
+    if (!res.ok) throw new Error('Failed to load periods');
+    allPeriods = await res.json();
+    if (!Array.isArray(allPeriods)) allPeriods = [];
+  } catch {
+    allPeriods = [];
+  }
+  renderChips();
+}
+
+function renderChips() {
+  $periodChips.innerHTML = '';
+  if (allPeriods.length === 0) {
+    $chipsLabel.style.display = 'none';
+    return;
+  }
+  $chipsLabel.style.display = 'block';
+
+  // Sort by year then month.
+  const sorted = [...allPeriods].sort((a, b) =>
+    a.year !== b.year ? a.year - b.year : a.month - b.month
+  );
+
+  sorted.forEach(p => {
+    const label = p.label || `${MONTHS[(p.month || 1) - 1]} ${p.year}`;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${label} <button class="chip-x" title="Delete period" data-id="${p.id}">&times;</button>`;
+    $periodChips.appendChild(chip);
+  });
+
+  // Attach delete handlers.
+  $periodChips.querySelectorAll('.chip-x').forEach(btn => {
+    btn.addEventListener('click', () => deletePeriod(btn.dataset.id));
+  });
+
+  // Update months-of-data metric.
+  $metricMonths.textContent = allPeriods.length;
+}
+
+async function deletePeriod(id) {
+  if (!confirm('Delete this period? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/api/period/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Delete failed');
+    await loadPeriods();
+    refreshBurnMetrics();
+    // Reload quarter if currently viewing.
+    if (quarterlyData) loadQuarter();
+  } catch (err) {
+    alert(`Error deleting period: ${err.message}`);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   Quarterly data loading & table rendering
+   ═══════════════════════════════════════════════════════ */
+
+$loadQtrBtn.addEventListener('click', loadQuarter);
+
+async function loadQuarter() {
+  const year = $selYear.value;
+  const quarter = $selQuarter.value;
+  $loadQtrBtn.disabled = true;
+  $loadQtrBtn.innerHTML = '<span class="spinner"></span> Loading…';
+
+  try {
+    const res = await fetch(`/api/quarterly?year=${year}&quarter=${quarter}`);
+    if (!res.ok) throw new Error(`Failed to load quarter (${res.status})`);
+    quarterlyData = await res.json();
+    renderSCFTable(year, quarter, quarterlyData);
+    renderBurnChart(quarterlyData);
+  } catch (err) {
+    $scfBody.innerHTML = `
+      <tr class="empty-state"><td colspan="5">
+        <div class="empty-placeholder">
+          <span class="empty-icon">⚠️</span>
+          <strong>Error loading data</strong>
+          <span>${err.message}</span>
+        </div>
+      </td></tr>`;
+  } finally {
+    $loadQtrBtn.disabled = false;
+    $loadQtrBtn.textContent = 'Load Quarter';
+  }
+}
+
+/**
+ * Render the Statement of Cash Flows table.
+ *
+ * Expected shape of `data`:
+ * {
+ *   months: [
+ *     { year, month, available: true/false },  // 3 entries
+ *     …
+ *   ],
+ *   rows: [
+ *     {
+ *       description: "string",
+ *       type: "section_header" | "subsection" | "line" | "subline" | "subtotal" | "grand_total",
+ *       values: [val_m1, val_m2, val_m3]  // null if month unavailable
+ *     },
+ *     …
+ *   ]
+ * }
+ */
+function renderSCFTable(year, quarter, data) {
+  const qInt = parseInt(quarter, 10);
+  const mIndexes = quarterMonths(qInt);
+  const months = data.months || [];
+  const rows = data.rows || [];
+
+  // Build header.
+  let headHtml = '<th>Description</th>';
+  mIndexes.forEach((mi, i) => {
+    const m = months[i];
+    const label = m && m.available
+      ? monthLabel(m.year || year, (m.month || mi + 1) - 1)
+      : monthLabel(year, mi);
+    headHtml += `<th>${label}</th>`;
+  });
+  headHtml += '<th>Quarter Total</th>';
+  $scfHead.innerHTML = headHtml;
+
+  if (rows.length === 0) {
+    const colSpan = mIndexes.length + 2;
+    $scfBody.innerHTML = `
+      <tr class="empty-state"><td colspan="${colSpan}">
+        <div class="empty-placeholder">
+          <span class="empty-icon">📭</span>
+          <strong>No data for Q${qInt} ${year}</strong>
+          <span>Upload SCF files for this quarter to see data here.</span>
+        </div>
+      </td></tr>`;
+    return;
+  }
+
+  let bodyHtml = '';
+  rows.forEach(row => {
+    const type = row.type || 'line';
+    const rowClass = `row-${type.replace(/_/g, '-')}`;
+    bodyHtml += `<tr class="${rowClass}">`;
+    bodyHtml += `<td>${row.description || ''}</td>`;
+
+    // Determine if this is a header-only row with no values.
+    const isHeaderOnly = type === 'section_header' || type === 'subsection';
+
+    let qtrTotal = null;
+    let availableCount = 0;
+
+    (row.values || []).forEach((v, i) => {
+      const avail = months[i] && months[i].available;
+      if (isHeaderOnly) {
+        bodyHtml += '<td></td>';
+      } else if (!avail || v == null) {
+        bodyHtml += '<td>—</td>';
+      } else {
+        const display = fmtAccounting(v, true);
+        const cls = Number(v) < 0 ? ' class="val-neg"' : '';
+        bodyHtml += `<td${cls}>${display}</td>`;
+        qtrTotal = (qtrTotal || 0) + Number(v);
+        availableCount++;
       }
-    }
-
-    async function handleDelete(id) {
-      if (!confirm('Delete this entry?')) return;
-      try {
-        await deleteEntry(id);
-        showToast('Entry deleted');
-        await refreshAll();
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
-    }
-
-    /* ── Cash-on-Hand live update ──────────────────────────── */
-    let cohTimeout = null;
-    document.getElementById('cashOnHand').addEventListener('input', () => {
-      clearTimeout(cohTimeout);
-      cohTimeout = setTimeout(renderSummary, 300);
     });
 
-    /* ── Initialization ────────────────────────────────────── */
-    document.addEventListener('DOMContentLoaded', () => {
-      // Set default month/year to current.
-      const now = new Date();
-      document.getElementById('month').value = now.getMonth() + 1;
-      document.getElementById('year').value = now.getFullYear();
+    // Quarter total column.
+    if (isHeaderOnly) {
+      bodyHtml += '<td></td>';
+    } else if (type === 'grand_total' && row.description &&
+               row.description.toLowerCase().includes('beginning')) {
+      // "Cash at beginning of period" — show dash for total.
+      bodyHtml += '<td>—</td>';
+    } else if (type === 'grand_total' && row.description &&
+               row.description.toLowerCase().includes('end')) {
+      // "Cash at end of period" — show last available month.
+      const lastVal = findLastAvailable(row.values, months);
+      if (lastVal != null) {
+        const display = fmtAccounting(lastVal, true);
+        const cls = Number(lastVal) < 0 ? ' class="val-neg"' : '';
+        bodyHtml += `<td${cls}>${display}</td>`;
+      } else {
+        bodyHtml += '<td>—</td>';
+      }
+    } else if (qtrTotal != null) {
+      const display = fmtAccounting(qtrTotal * 1000, true);
+      const cls = qtrTotal < 0 ? ' class="val-neg"' : '';
+      bodyHtml += `<td${cls}>${display}</td>`;
+    } else {
+      bodyHtml += '<td>—</td>';
+    }
 
-      document.getElementById('entryForm').addEventListener('submit', handleSubmit);
-      refreshAll();
-    });
-  </script>
+    bodyHtml += '</tr>';
+  });
+
+  $scfBody.innerHTML = bodyHtml;
+}
+
+/** Return the last non-null value for months that are available. */
+function findLastAvailable(values, months) {
+  if (!values) return null;
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (months[i] && months[i].available && values[i] != null) {
+      return values[i];
+    }
+  }
+  return null;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Burn Analysis Metrics
+   ═══════════════════════════════════════════════════════ */
+
+async function refreshBurnMetrics() {
+  const cashStr = $cashOnHand.value;
+  const cashVal = parseFormattedNumber(cashStr);
+  let url = '/api/burn-summary';
+  if (!isNaN(cashVal) && cashVal > 0) {
+    url += `?cash_on_hand=${cashVal}`;
+  }
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    $metricBurn.textContent = data.avg_net_cash_change != null
+      ? fmtMetric(data.avg_net_cash_change) : '—';
+    $metricBurn.className = 'metric-value ' +
+      (data.avg_net_cash_change < 0 ? 'negative' : 'neutral');
+
+    $metricOpBurn.textContent = data.avg_operating_burn != null
+      ? fmtMetric(data.avg_operating_burn) : '—';
+
+    $metricCash.textContent = data.cash_position != null
+      ? fmtMetric(data.cash_position) : '—';
+
+    if (data.runway_months != null) {
+      const rm = data.runway_months;
+      $metricRunway.textContent = rm === Infinity ? '∞' : `${rm.toFixed(1)} mo`;
+      $metricRunway.className = 'metric-value ' +
+        (rm < 6 ? 'negative' : rm < 12 ? 'neutral' : 'positive');
+    } else {
+      $metricRunway.textContent = '—';
+      $metricRunway.className = 'metric-value neutral';
+    }
+
+    $metricMonths.textContent = data.months_of_data ?? allPeriods.length;
+  } catch {
+    // Silently ignore — metrics will show defaults.
+  }
+}
+
+// Recalculate runway when the cash-on-hand input changes.
+let runwayDebounce = null;
+$cashOnHand.addEventListener('input', () => {
+  clearTimeout(runwayDebounce);
+  runwayDebounce = setTimeout(refreshBurnMetrics, 400);
+});
+
+/* ═══════════════════════════════════════════════════════
+   Burn Trend Chart (Chart.js)
+   ═══════════════════════════════════════════════════════ */
+
+/**
+ * Expected shape of quarterlyData for the chart (reuses the
+ * /api/quarterly response or a dedicated trend endpoint).
+ *
+ * Uses the rows to extract:
+ * - Net cash used in operating activities  (bar)
+ * - Net decrease/increase in cash          (line)
+ * - Cash at end of period                  (line, right axis)
+ */
+function renderBurnChart(data) {
+  if (!data || !data.rows || !data.months) return;
+
+  const months = data.months || [];
+  const labels = months.map((m, i) => {
+    if (m && m.available) return monthLabel(m.year, (m.month || i + 1) - 1);
+    return `Month ${i + 1}`;
+  });
+
+  function findRow(keyword) {
+    return data.rows.find(r =>
+      r.description && r.description.toLowerCase().includes(keyword)
+    );
+  }
+
+  const opRow   = findRow('net cash') && findRow('operating')
+                  ? data.rows.find(r => r.description &&
+                      r.description.toLowerCase().includes('operating') &&
+                      (r.type === 'subtotal' || r.type === 'grand_total'))
+                  : null;
+  const netRow  = findRow('net decrease') || findRow('net increase') ||
+                  data.rows.find(r => r.description &&
+                    r.description.toLowerCase().includes('net') &&
+                    r.description.toLowerCase().includes('cash and cash') &&
+                    (r.type === 'subtotal' || r.type === 'grand_total'));
+  const endRow  = data.rows.find(r => r.description &&
+                    r.description.toLowerCase().includes('end of period'));
+
+  const toThousands = vals =>
+    (vals || []).map((v, i) =>
+      months[i] && months[i].available && v != null ? Math.round(v / 1000) : null
+    );
+
+  const opVals  = toThousands(opRow  ? opRow.values  : []);
+  const netVals = toThousands(netRow ? netRow.values  : []);
+  const endVals = toThousands(endRow ? endRow.values  : []);
+
+  if (burnChart) burnChart.destroy();
+
+  const ctx = document.getElementById('burnChart').getContext('2d');
+  burnChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Net Cash from Operations (thousands)',
+          data: opVals,
+          backgroundColor: opVals.map(v =>
+            v != null && v < 0 ? 'rgba(229,57,53,0.65)' : 'rgba(67,160,71,0.65)'
+          ),
+          borderColor: opVals.map(v =>
+            v != null && v < 0 ? '#e53935' : '#43a047'
+          ),
+          borderWidth: 1,
+          order: 2,
+          yAxisID: 'y',
+        },
+        {
+          type: 'line',
+          label: 'Net Cash Change (thousands)',
+          data: netVals,
+          borderColor: '#1a73e8',
+          backgroundColor: 'rgba(26,115,232,0.1)',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#1a73e8',
+          tension: 0.3,
+          fill: false,
+          order: 1,
+          yAxisID: 'y',
+          spanGaps: true,
+        },
+        {
+          type: 'line',
+          label: 'Cash Position (thousands)',
+          data: endVals,
+          borderColor: '#43a047',
+          backgroundColor: 'rgba(67,160,71,0.08)',
+          borderWidth: 2,
+          borderDash: [6, 3],
+          pointRadius: 4,
+          pointBackgroundColor: '#43a047',
+          tension: 0.3,
+          fill: false,
+          order: 0,
+          yAxisID: 'y1',
+          spanGaps: true,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true, padding: 16, font: { size: 12 } },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v == null) return ctx.dataset.label + ': —';
+              const sign = v < 0 ? '-' : '';
+              return `${ctx.dataset.label}: ${sign}$${Math.abs(v).toLocaleString('en-US')}`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          position: 'left',
+          title: { display: true, text: 'Amount (thousands)', font: { size: 11 } },
+          ticks: {
+            callback: v => {
+              const neg = v < 0;
+              const s = Math.abs(v).toLocaleString('en-US');
+              return neg ? `(${s})` : s;
+            },
+          },
+          grid: { color: 'rgba(0,0,0,0.06)' },
+        },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'Cash Position (thousands)', font: { size: 11 } },
+          ticks: {
+            callback: v => '$' + v.toLocaleString('en-US'),
+          },
+          grid: { drawOnChartArea: false },
+        },
+        x: {
+          grid: { display: false },
+        },
+      },
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   Bootstrap: load periods on page load
+   ═══════════════════════════════════════════════════════ */
+
+(async function init() {
+  await loadPeriods();
+  refreshBurnMetrics();
+})();
+</script>
 </body>
 </html>
