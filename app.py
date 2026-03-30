@@ -12,8 +12,12 @@ import re
 import sqlite3
 from datetime import datetime
 
-from flask import Flask, g, jsonify, render_template, request
-from openpyxl import load_workbook
+from io import BytesIO
+
+from flask import Flask, g, jsonify, render_template, request, send_file
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 # ---------------------------------------------------------------------------
 # App / config
@@ -328,6 +332,18 @@ _MONTH_NAMES = [
     "December",
 ]
 
+_MONTH_ABBREVS = [
+    "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]
+
+_QUARTER_MONTH_RANGES: dict[int, list[int]] = {
+    1: [1, 2, 3],
+    2: [4, 5, 6],
+    3: [7, 8, 9],
+    4: [10, 11, 12],
+}
+
 
 def _period_to_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
@@ -446,39 +462,9 @@ def delete_period(period_id: int):
     return jsonify({"message": f"Period {period_id} deleted."}), 200
 
 
-@app.route("/api/quarterly", methods=["GET"])
-def quarterly_view():
-    """Return a quarterly view of line items for column display.
-
-    Query params:
-        year   — required, e.g. 2025
-        quarter — required, 1-4 (Q1=Jan-Mar … Q4=Oct-Dec)
-
-    Returns each line item description mapped to an array of monthly
-    values plus a "Total" sum column.
-    """
-    year_raw = request.args.get("year")
-    quarter_raw = request.args.get("quarter")
-    if year_raw is None or quarter_raw is None:
-        return jsonify({"error": "'year' and 'quarter' are required."}), 400
-
-    try:
-        year = int(year_raw)
-        quarter = int(quarter_raw)
-    except (TypeError, ValueError):
-        return jsonify({"error": "'year' and 'quarter' must be integers."}), 400
-
-    if quarter not in (1, 2, 3, 4):
-        return jsonify({"error": "'quarter' must be 1, 2, 3, or 4."}), 400
-
-    # Quarter month ranges.
-    quarter_months = {
-        1: [1, 2, 3],
-        2: [4, 5, 6],
-        3: [7, 8, 9],
-        4: [10, 11, 12],
-    }
-    months = quarter_months[quarter]
+def _build_quarterly_data(year: int, quarter: int) -> dict:
+    """Build quarterly SCF data. Returns the same structure as the JSON endpoint."""
+    months = _QUARTER_MONTH_RANGES[quarter]
 
     db = get_db()
 
@@ -526,12 +512,12 @@ def quarterly_view():
     ]
 
     # Map (section, is_subtotal) to the row type the frontend uses.
-    _SECTION_HEADER_DESCS = {
+    section_header_descs = {
         "cash flows from operating activities",
         "cash flows from investing activities",
         "cash flows from financing activities",
     }
-    _SUBSECTION_DESCS = {
+    subsection_descs = {
         "adjustments to reconcile net loss to cash from operating activities",
         "adjustments to reconcile net income to cash from operating activities",
         "changes in operating assets and liabilities",
@@ -539,9 +525,9 @@ def quarterly_view():
 
     def _row_type(desc: str, section: str, is_sub: int) -> str:
         dl = desc.strip().rstrip(":").lower()
-        if dl in _SECTION_HEADER_DESCS:
+        if dl in section_header_descs:
             return "section_header"
-        if dl in _SUBSECTION_DESCS:
+        if dl in subsection_descs:
             return "subsection"
         if section == "summary":
             return "grand_total"
@@ -552,8 +538,7 @@ def quarterly_view():
     # Insert section headers and subsections into the row list so the
     # frontend can render them.  Walk the ordered descriptions and
     # emit synthetic header rows when the section changes.
-    _SECTION_ORDER = ["operating", "investing", "financing", "summary"]
-    _SECTION_TITLES = {
+    section_titles = {
         "operating": "Cash flows from operating activities",
         "investing": "Cash flows from investing activities",
         "financing": "Cash flows from financing activities",
@@ -569,10 +554,10 @@ def quarterly_view():
         is_sub = subtotal_map[desc]
 
         # Emit section header on section transition.
-        if section != prev_section and section in _SECTION_TITLES:
+        if section != prev_section and section in section_titles:
             rows.append(
                 {
-                    "description": _SECTION_TITLES[section],
+                    "description": section_titles[section],
                     "type": "section_header",
                     "values": [None] * len(months),
                 }
@@ -631,13 +616,253 @@ def quarterly_view():
             }
         )
 
-    return jsonify(
-        {
-            "year": year,
-            "quarter": quarter,
-            "months": months_meta,
-            "rows": rows,
-        }
+    return {
+        "year": year,
+        "quarter": quarter,
+        "months": months_meta,
+        "rows": rows,
+    }
+
+
+@app.route("/api/quarterly", methods=["GET"])
+def quarterly_view():
+    """Return a quarterly view of line items for column display.
+
+    Query params:
+        year   — required, e.g. 2025
+        quarter — required, 1-4 (Q1=Jan-Mar … Q4=Oct-Dec)
+
+    Returns each line item description mapped to an array of monthly
+    values plus a "Total" sum column.
+    """
+    year_raw = request.args.get("year")
+    quarter_raw = request.args.get("quarter")
+    if year_raw is None or quarter_raw is None:
+        return jsonify({"error": "'year' and 'quarter' are required."}), 400
+
+    try:
+        year = int(year_raw)
+        quarter = int(quarter_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'year' and 'quarter' must be integers."}), 400
+
+    if quarter not in (1, 2, 3, 4):
+        return jsonify({"error": "'quarter' must be 1, 2, 3, or 4."}), 400
+
+    return jsonify(_build_quarterly_data(year, quarter))
+
+
+@app.route("/api/export", methods=["GET"])
+def export_excel():
+    """Export quarterly SCF data as a professionally formatted Excel workbook.
+
+    Query params:
+        year    — required, e.g. 2025
+        quarter — required, 1-4 (Q1=Jan-Mar … Q4=Oct-Dec)
+
+    Returns an .xlsx file as a downloadable attachment.
+    """
+    year_raw = request.args.get("year")
+    quarter_raw = request.args.get("quarter")
+    if year_raw is None or quarter_raw is None:
+        return jsonify({"error": "'year' and 'quarter' are required."}), 400
+
+    try:
+        year = int(year_raw)
+        quarter = int(quarter_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'year' and 'quarter' must be integers."}), 400
+
+    if quarter not in (1, 2, 3, 4):
+        return jsonify({"error": "'quarter' must be 1, 2, 3, or 4."}), 400
+
+    data = _build_quarterly_data(year, quarter)
+    months_meta = data["months"]
+    data_rows = data["rows"]
+
+    # Total columns: Description + one per month + Quarter Total.
+    num_cols = 1 + len(months_meta) + 1
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"SCF Q{quarter} {year}"
+
+    # -- Row 1: Company title ------------------------------------------------
+    ws.merge_cells(
+        start_row=1, start_column=1, end_row=1, end_column=num_cols,
+    )
+    title_cell = ws.cell(row=1, column=1, value="Statement of Cash Flows")
+    title_cell.font = Font(bold=True, size=14)
+    title_cell.alignment = Alignment(horizontal="center")
+
+    # -- Row 2: Period label -------------------------------------------------
+    first_m = months_meta[0]["month"]
+    last_m = months_meta[-1]["month"]
+    period_label = (
+        f"Q{quarter} {year} "
+        f"({_MONTH_ABBREVS[first_m]} - {_MONTH_ABBREVS[last_m]})"
+    )
+    ws.merge_cells(
+        start_row=2, start_column=1, end_row=2, end_column=num_cols,
+    )
+    period_cell = ws.cell(row=2, column=1, value=period_label)
+    period_cell.font = Font(italic=True, size=11)
+    period_cell.alignment = Alignment(horizontal="center")
+
+    # -- Row 3: Amounts note -------------------------------------------------
+    ws.merge_cells(
+        start_row=3, start_column=1, end_row=3, end_column=num_cols,
+    )
+    note_cell = ws.cell(row=3, column=1, value="(amounts in thousands)")
+    note_cell.font = Font(italic=True, size=9)
+    note_cell.alignment = Alignment(horizontal="center")
+
+    # -- Row 4: blank --------------------------------------------------------
+
+    # -- Row 5: Column headers -----------------------------------------------
+    header_font = Font(bold=True)
+    header_fill = PatternFill(
+        start_color="D6E4F0", end_color="D6E4F0", fill_type="solid",
+    )
+    header_border = Border(bottom=Side(style="thin"))
+
+    headers = ["Description"]
+    for m in months_meta:
+        headers.append(f"{_MONTH_ABBREVS[m['month']]} {m['year']}")
+    headers.append("Quarter Total")
+
+    for col_idx, hdr in enumerate(headers, start=1):
+        cell = ws.cell(row=5, column=col_idx, value=hdr)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = header_border
+        if col_idx > 1:
+            cell.alignment = Alignment(horizontal="center")
+
+    # -- Column widths -------------------------------------------------------
+    ws.column_dimensions["A"].width = 45
+    for col_idx in range(2, num_cols + 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 18
+
+    # -- Reusable styles for data rows ---------------------------------------
+    num_fmt = '#,##0;(#,##0);"-"'
+    section_fill = PatternFill(
+        start_color="E8EDF2", end_color="E8EDF2", fill_type="solid",
+    )
+    subtotal_fill = PatternFill(
+        start_color="F0F4F8", end_color="F0F4F8", fill_type="solid",
+    )
+    subtotal_border = Border(top=Side(style="thin"))
+    grand_border = Border(
+        top=Side(style="thin"), bottom=Side(style="double"),
+    )
+    right_align = Alignment(horizontal="right")
+    center_align = Alignment(horizontal="center")
+
+    def _write_value(cell, val, fmt=num_fmt):
+        """Write a numeric value or an em-dash for None."""
+        if val is None:
+            cell.value = "\u2014"
+            cell.alignment = center_align
+        else:
+            cell.value = val
+            cell.number_format = fmt
+            cell.alignment = right_align
+
+    # -- Data rows (starting at row 6) --------------------------------------
+    current_row = 6
+
+    for row_data in data_rows:
+        desc = row_data["description"]
+        row_type = row_data["type"]
+        values = row_data.get("values", [])
+        total = row_data.get("total")
+
+        desc_cell = ws.cell(row=current_row, column=1)
+
+        if row_type == "section_header":
+            desc_cell.value = desc
+            desc_cell.font = Font(bold=True)
+            desc_cell.fill = section_fill
+            for ci in range(2, num_cols + 1):
+                ws.cell(row=current_row, column=ci).fill = section_fill
+
+        elif row_type == "subsection":
+            desc_cell.value = f"  {desc}"
+            desc_cell.font = Font(italic=True)
+
+        elif row_type == "line":
+            desc_cell.value = f"  {desc}"
+            for i, val in enumerate(values):
+                _write_value(ws.cell(row=current_row, column=2 + i), val)
+            _write_value(
+                ws.cell(row=current_row, column=num_cols), total,
+            )
+
+        elif row_type == "subtotal":
+            desc_cell.value = desc
+            desc_cell.font = Font(bold=True)
+            desc_cell.fill = subtotal_fill
+            for i, val in enumerate(values):
+                cell = ws.cell(row=current_row, column=2 + i)
+                cell.fill = subtotal_fill
+                cell.border = subtotal_border
+                _write_value(cell, val)
+            total_cell = ws.cell(row=current_row, column=num_cols)
+            total_cell.fill = subtotal_fill
+            total_cell.border = subtotal_border
+            _write_value(total_cell, total)
+
+        elif row_type == "grand_total":
+            desc_cell.value = desc
+            desc_cell.font = Font(bold=True)
+            desc_lower = desc.lower()
+            is_beginning = (
+                desc_lower
+                == "cash and cash equivalents at beginning of period"
+            )
+            is_ending = (
+                desc_lower
+                == "cash and cash equivalents at end of period"
+            )
+
+            for i, val in enumerate(values):
+                cell = ws.cell(row=current_row, column=2 + i)
+                cell.border = grand_border
+                _write_value(cell, val)
+
+            total_cell = ws.cell(row=current_row, column=num_cols)
+            total_cell.border = grand_border
+            if is_beginning:
+                total_cell.value = "\u2014"
+                total_cell.alignment = center_align
+            elif is_ending:
+                # Show last available month's value instead of the sum.
+                last_val = None
+                for v in reversed(values):
+                    if v is not None:
+                        last_val = v
+                        break
+                _write_value(total_cell, last_val)
+            else:
+                _write_value(total_cell, total)
+
+        current_row += 1
+
+    # -- Stream the workbook back as a download ------------------------------
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"SCF_Q{quarter}_{year}.xlsx"
+    return send_file(
+        output,
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        as_attachment=True,
+        download_name=filename,
     )
 
 

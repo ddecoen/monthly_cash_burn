@@ -207,6 +207,24 @@
     background: var(--primary-light);
   }
 
+  .btn-export {
+    background-color: var(--success);
+    color: #fff;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--transition);
+  }
+  .btn-export:hover {
+    background-color: #388e3c;
+  }
+  .btn-export:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .btn-sm {
     padding: 0.35rem 0.75rem;
     font-size: 0.8rem;
@@ -598,6 +616,7 @@
           </select>
         </div>
         <button class="btn btn-primary" id="loadQtrBtn">Load Quarter</button>
+        <button id="exportBtn" class="btn btn-export" title="Export to Excel" disabled>📥 Export Excel</button>
       </div>
       <div class="chips-label" id="chipsLabel" style="display:none;">Uploaded periods:</div>
       <div class="chips" id="periodChips"></div>
@@ -756,6 +775,7 @@ const $uploadError   = document.getElementById('uploadError');
 const $selYear       = document.getElementById('selYear');
 const $selQuarter    = document.getElementById('selQuarter');
 const $loadQtrBtn    = document.getElementById('loadQtrBtn');
+const $exportBtn     = document.getElementById('exportBtn');
 const $chipsLabel    = document.getElementById('chipsLabel');
 const $periodChips   = document.getElementById('periodChips');
 
@@ -937,6 +957,12 @@ async function deletePeriod(id) {
 
 $loadQtrBtn.addEventListener('click', loadQuarter);
 
+$exportBtn.addEventListener('click', () => {
+  const year = $selYear.value;
+  const quarter = $selQuarter.value;
+  window.location.href = `/api/export?year=${year}&quarter=${quarter}`;
+});
+
 async function loadQuarter() {
   const year = $selYear.value;
   const quarter = $selQuarter.value;
@@ -949,7 +975,9 @@ async function loadQuarter() {
     quarterlyData = await res.json();
     renderSCFTable(year, quarter, quarterlyData);
     renderBurnChart(quarterlyData);
+    $exportBtn.disabled = false;
   } catch (err) {
+    $exportBtn.disabled = true;
     $scfBody.innerHTML = `
       <tr class="empty-state"><td colspan="5">
         <div class="empty-placeholder">
