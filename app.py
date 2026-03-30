@@ -514,30 +514,120 @@ def quarterly_view():
                 section_map[desc] = item["section"]
                 subtotal_map[desc] = item["is_subtotal"]
 
-    # Build value arrays: one entry per quarter month, plus a total.
-    month_labels = [_MONTH_NAMES[m] for m in months]
-    data_rows: list[dict] = []
+    # Build month metadata the frontend expects.
+    months_meta = [
+        {
+            "year": year,
+            "month": m,
+            "available": m in period_map,
+            "label": f"{_MONTH_NAMES[m]} {year}",
+        }
+        for m in months
+    ]
+
+    # Map (section, is_subtotal) to the row type the frontend uses.
+    _SECTION_HEADER_DESCS = {
+        "cash flows from operating activities",
+        "cash flows from investing activities",
+        "cash flows from financing activities",
+    }
+    _SUBSECTION_DESCS = {
+        "adjustments to reconcile net loss to cash from operating activities",
+        "adjustments to reconcile net income to cash from operating activities",
+        "changes in operating assets and liabilities",
+    }
+
+    def _row_type(desc: str, section: str, is_sub: int) -> str:
+        dl = desc.strip().rstrip(":").lower()
+        if dl in _SECTION_HEADER_DESCS:
+            return "section_header"
+        if dl in _SUBSECTION_DESCS:
+            return "subsection"
+        if section == "summary":
+            return "grand_total"
+        if is_sub:
+            return "subtotal"
+        return "line"
+
+    # Insert section headers and subsections into the row list so the
+    # frontend can render them.  Walk the ordered descriptions and
+    # emit synthetic header rows when the section changes.
+    _SECTION_ORDER = ["operating", "investing", "financing", "summary"]
+    _SECTION_TITLES = {
+        "operating": "Cash flows from operating activities",
+        "investing": "Cash flows from investing activities",
+        "financing": "Cash flows from financing activities",
+    }
+
+    rows: list[dict] = []
+    prev_section: str | None = None
+    emitted_adjustments = False
+    emitted_changes = False
 
     for desc in description_order:
-        values: list[float] = []
+        section = section_map[desc]
+        is_sub = subtotal_map[desc]
+
+        # Emit section header on section transition.
+        if section != prev_section and section in _SECTION_TITLES:
+            rows.append(
+                {
+                    "description": _SECTION_TITLES[section],
+                    "type": "section_header",
+                    "values": [None] * len(months),
+                }
+            )
+            prev_section = section
+            emitted_adjustments = False
+            emitted_changes = False
+
+        # Emit subsection headers within operating.
+        if section == "operating" and not is_sub:
+            dl = desc.lower()
+            if (
+                not emitted_adjustments
+                and dl == "depreciation and amortization expense"
+            ):
+                rows.append(
+                    {
+                        "description": "Adjustments to reconcile net loss to cash from operating activities:",
+                        "type": "subsection",
+                        "values": [None] * len(months),
+                    }
+                )
+                emitted_adjustments = True
+            if not emitted_changes and dl == "accounts receivable":
+                rows.append(
+                    {
+                        "description": "Changes in operating assets and liabilities:",
+                        "type": "subsection",
+                        "values": [None] * len(months),
+                    }
+                )
+                emitted_changes = True
+
+        # Build per-month values (None when month not uploaded).
+        values: list[float | None] = []
         for m in months:
-            if m in period_map:
+            if m not in period_map:
+                values.append(None)
+            else:
                 row = db.execute(
                     "SELECT amount FROM line_items "
                     "WHERE period_id = ? AND description = ?",
                     (period_map[m]["id"], desc),
                 ).fetchone()
                 values.append(row["amount"] if row else 0.0)
-            else:
-                values.append(0.0)
 
-        data_rows.append(
+        available_vals = [v for v in values if v is not None]
+        total = round(sum(available_vals), 2) if available_vals else None
+
+        rows.append(
             {
                 "description": desc,
-                "section": section_map[desc],
-                "is_subtotal": subtotal_map[desc],
+                "type": _row_type(desc, section, is_sub),
                 "values": values,
-                "total": round(sum(values), 2),
+                "total": total,
             }
         )
 
@@ -545,8 +635,8 @@ def quarterly_view():
         {
             "year": year,
             "quarter": quarter,
-            "months": month_labels,
-            "data": data_rows,
+            "months": months_meta,
+            "rows": rows,
         }
     )
 
@@ -568,6 +658,9 @@ def burn_summary():
                 "months_of_data": 0,
                 "monthly_burn_trend": [],
                 "avg_monthly_burn": 0,
+                "avg_net_cash_change": 0,
+                "avg_operating_burn": 0,
+                "cash_position": None,
                 "cash_position_over_time": [],
                 "runway_months": None,
             }
@@ -575,6 +668,7 @@ def burn_summary():
 
     monthly_burn_trend: list[dict] = []
     cash_positions: list[dict] = []
+    operating_burns: list[float] = []
 
     for period in periods:
         pid = period["id"]
@@ -602,6 +696,16 @@ def burn_summary():
                 (pid,),
             ).fetchall()
             net_change = sum(r["amount"] for r in subtotals)
+
+        # Operating burn = net cash used in operating activities.
+        op_row = db.execute(
+            "SELECT amount FROM line_items "
+            "WHERE period_id = ? AND is_subtotal = 1 "
+            "AND section = 'operating'",
+            (pid,),
+        ).fetchone()
+        if op_row is not None:
+            operating_burns.append(op_row["amount"])
 
         monthly_burn_trend.append(
             {
@@ -636,6 +740,15 @@ def burn_summary():
     total_net = sum(item["net_cash_change"] for item in monthly_burn_trend)
     months_of_data = len(monthly_burn_trend)
     avg_monthly_burn = round(-total_net / months_of_data, 2)
+    avg_net_cash_change = round(total_net / months_of_data, 2)
+    avg_operating_burn = (
+        round(sum(operating_burns) / len(operating_burns), 2)
+        if operating_burns
+        else 0
+    )
+    latest_cash = (
+        cash_positions[-1]["cash_position"] if cash_positions else None
+    )
 
     # Runway estimate.
     cash_on_hand_raw = request.args.get("cash_on_hand")
@@ -653,6 +766,9 @@ def burn_summary():
             "months_of_data": months_of_data,
             "monthly_burn_trend": monthly_burn_trend,
             "avg_monthly_burn": avg_monthly_burn,
+            "avg_net_cash_change": avg_net_cash_change,
+            "avg_operating_burn": avg_operating_burn,
+            "cash_position": latest_cash,
             "cash_position_over_time": cash_positions,
             "runway_months": runway_months,
         }

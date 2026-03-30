@@ -861,6 +861,7 @@ $uploadBtn.addEventListener('click', async () => {
     // Refresh periods and metrics.
     await loadPeriods();
     refreshBurnMetrics();
+    loadQuarter();
   } catch (err) {
     $uploadError.textContent = `✗ ${err.message}`;
     $uploadError.classList.add('show');
@@ -1060,7 +1061,7 @@ function renderSCFTable(year, quarter, data) {
         bodyHtml += '<td>—</td>';
       }
     } else if (qtrTotal != null) {
-      const display = fmtAccounting(qtrTotal * 1000, true);
+      const display = fmtAccounting(qtrTotal, true);
       const cls = qtrTotal < 0 ? ' class="val-neg"' : '';
       bodyHtml += `<td${cls}>${display}</td>`;
     } else {
