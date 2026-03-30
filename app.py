@@ -27,6 +27,7 @@ app = Flask(__name__)
 
 DATABASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cash_burn.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+EXPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "exports")
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -49,6 +50,16 @@ CREATE TABLE IF NOT EXISTS line_items (
     amount REAL DEFAULT 0,
     is_subtotal INTEGER DEFAULT 0,
     row_order INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS exported_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    year INTEGER NOT NULL,
+    quarter INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    filepath TEXT NOT NULL,
+    exported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT
 );
 """
 
@@ -1235,12 +1246,26 @@ def export_excel():
 
         r += 1
 
-    # ── Stream the workbook ───────────────────────────────────────────
+    # Save to exports history.
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"Cash_Burn_Report_Q{quarter}_{year}_{ts}.xlsx"
+    filepath = os.path.join(EXPORTS_DIR, filename)
+    wb.save(filepath)
+
+    db = get_db()
+    db.execute(
+        "INSERT INTO exported_reports (year, quarter, filename, filepath) "
+        "VALUES (?, ?, ?, ?)",
+        (year, quarter, filename, filepath),
+    )
+    db.commit()
+
+    # Also stream for download.
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
-    filename = f"Cash_Burn_Report_Q{quarter}_{year}.xlsx"
     return send_file(
         output,
         mimetype=(
@@ -1250,6 +1275,57 @@ def export_excel():
         as_attachment=True,
         download_name=filename,
     )
+
+
+@app.route("/api/reports", methods=["GET"])
+def list_reports():
+    """Return all exported reports, newest first."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM exported_reports ORDER BY exported_at DESC"
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/reports/<int:report_id>/download", methods=["GET"])
+def download_report(report_id: int):
+    """Download a previously exported report by ID."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM exported_reports WHERE id = ?", (report_id,)
+    ).fetchone()
+    if row is None:
+        return jsonify({"error": f"Report {report_id} not found."}), 404
+    filepath = row["filepath"]
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Report file no longer exists on disk."}), 404
+    return send_file(
+        filepath,
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument"
+            ".spreadsheetml.sheet"
+        ),
+        as_attachment=True,
+        download_name=row["filename"],
+    )
+
+
+@app.route("/api/reports/<int:report_id>", methods=["DELETE"])
+def delete_report(report_id: int):
+    """Delete an exported report record and its file."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM exported_reports WHERE id = ?", (report_id,)
+    ).fetchone()
+    if row is None:
+        return jsonify({"error": f"Report {report_id} not found."}), 404
+    # Remove file from disk.
+    filepath = row["filepath"]
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    db.execute("DELETE FROM exported_reports WHERE id = ?", (report_id,))
+    db.commit()
+    return jsonify({"message": f"Report {report_id} deleted."}), 200
 
 
 @app.route("/api/burn-summary", methods=["GET"])

@@ -555,6 +555,89 @@
     opacity: 0.5;
   }
 
+  /* ── Report History ──────────────────────────────────── */
+
+  .report-history-section {
+    margin-top: 1.5rem;
+  }
+  .section-subtitle {
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 1rem;
+  }
+  .report-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .report-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-input-bg, #f8f9fa);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    transition: background-color var(--transition-fast);
+  }
+  .report-item:hover {
+    background: #eef1f5;
+  }
+  .report-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .report-item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-text);
+  }
+  .report-item-date {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+  }
+  .report-item-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .btn-download {
+    background-color: var(--color-primary);
+    color: #fff;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+  }
+  .btn-download:hover {
+    background-color: var(--color-primary-hover);
+  }
+  .btn-delete-report {
+    background: none;
+    border: 1px solid var(--color-danger);
+    color: var(--color-danger);
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+  .btn-delete-report:hover {
+    background-color: var(--color-danger);
+    color: #fff;
+  }
+  .empty-hint {
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-style: italic;
+    padding: 1rem 0;
+    text-align: center;
+  }
+
   /* ── Responsive tweaks ──────────────────────────────── */
 
   @media (max-width: 640px) {
@@ -692,6 +775,15 @@
       <canvas id="burnChart"></canvas>
     </div>
   </div>
+
+    <!-- Report History -->
+    <section class="card report-history-section">
+      <h2 class="card-title">📋 Report History</h2>
+      <p class="section-subtitle">Previously exported reports</p>
+      <div id="reportList" class="report-list">
+        <p class="empty-hint">No reports exported yet.</p>
+      </div>
+    </section>
 </div>
 
 <script>
@@ -788,6 +880,7 @@ const $metricCash    = document.getElementById('metricCash');
 const $metricRunway  = document.getElementById('metricRunway');
 const $metricMonths  = document.getElementById('metricMonths');
 const $cashOnHand    = document.getElementById('cashOnHandInput');
+const $reportList    = document.getElementById('reportList');
 
 /* ═══════════════════════════════════════════════════════
    Initialise period selector defaults
@@ -957,10 +1050,33 @@ async function deletePeriod(id) {
 
 $loadQtrBtn.addEventListener('click', loadQuarter);
 
-$exportBtn.addEventListener('click', () => {
+$exportBtn.addEventListener('click', async () => {
   const year = $selYear.value;
   const quarter = $selQuarter.value;
-  window.location.href = `/api/export?year=${year}&quarter=${quarter}`;
+  $exportBtn.disabled = true;
+  $exportBtn.textContent = 'Exporting…';
+  try {
+    const res = await fetch(`/api/export?year=${year}&quarter=${quarter}`);
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') || '';
+    const match = cd.match(/filename=([^;]+)/);
+    const filename = match ? match[1] : `Cash_Burn_Report_Q${quarter}_${year}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    loadReports();
+  } catch (err) {
+    alert(`Export error: ${err.message}`);
+  } finally {
+    $exportBtn.disabled = false;
+    $exportBtn.textContent = '📥 Export Excel';
+  }
 });
 
 async function loadQuarter() {
@@ -1319,12 +1435,64 @@ function renderBurnChart(data) {
 }
 
 /* ═══════════════════════════════════════════════════════
+   Report History
+   ═══════════════════════════════════════════════════════ */
+
+async function loadReports() {
+  try {
+    const res = await fetch('/api/reports');
+    if (!res.ok) return;
+    const reports = await res.json();
+    renderReports(reports);
+  } catch {
+    // Silently ignore.
+  }
+}
+
+function renderReports(reports) {
+  if (!reports || reports.length === 0) {
+    $reportList.innerHTML = '<p class="empty-hint">No reports exported yet.</p>';
+    return;
+  }
+  $reportList.innerHTML = reports.map(r => {
+    const date = new Date(r.exported_at + 'Z');
+    const dateStr = date.toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+    return `
+      <div class="report-item">
+        <div class="report-item-info">
+          <span class="report-item-name">Q${r.quarter} ${r.year} Cash Burn Report</span>
+          <span class="report-item-date">Exported: ${dateStr} &middot; ${r.filename}</span>
+        </div>
+        <div class="report-item-actions">
+          <button class="btn-download" onclick="window.location.href='/api/reports/${r.id}/download'">Download</button>
+          <button class="btn-delete-report" onclick="deleteReport(${r.id})">Delete</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function deleteReport(id) {
+  if (!confirm('Delete this exported report?')) return;
+  try {
+    const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Delete failed');
+    loadReports();
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
    Bootstrap: load periods on page load
    ═══════════════════════════════════════════════════════ */
 
 (async function init() {
   await loadPeriods();
   refreshBurnMetrics();
+  loadReports();
 })();
 </script>
 </body>
