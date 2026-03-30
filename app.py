@@ -4,6 +4,8 @@ Tracks monthly revenue and categorised expenses, calculates burn rate,
 and estimates remaining runway given a cash balance.
 """
 
+from __future__ import annotations
+
 import os
 import sqlite3
 from contextlib import contextmanager
